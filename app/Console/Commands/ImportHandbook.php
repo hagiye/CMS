@@ -73,21 +73,37 @@ class ImportHandbook extends Command
         }
         $to = min($to, $totalPages);
 
+        $edition = ContentNode::firstOrCreate(
+            ['slug' => 'au-handbook-2023'],
+            [
+                'type' => 'edition',
+                'position' => 1,
+                'status' => ContentNodeStatus::Draft,
+                'edition' => '2023',
+            ],
+        );
+
+        ContentTranslation::updateOrCreate(
+            ['content_node_id' => $edition->id, 'locale' => $lang],
+            ['title' => 'African Union Handbook 2023', 'body' => null],
+        );
+
         // Create/ensure node for AUC
         $section = ContentNode::firstOrCreate(
             ['slug' => 'african-union-commission-2023'],
             [
+                'parent_id' => $edition->id,
                 'type' => 'section',
                 'position' => 1,
                 'status' => ContentNodeStatus::Draft,
                 'edition' => '2023',
                 'source_page_start' => $from,
                 'source_page_end' => $to,
-                'meta' => ['page_start' => $from, 'page_end' => $to],
             ]
         );
 
         $section->update([
+            'parent_id' => $edition->id,
             'edition' => '2023',
             'source_page_start' => $from,
             'source_page_end' => $to,
@@ -100,7 +116,6 @@ class ImportHandbook extends Command
                 'external_url' => 'https://au.int/sites/default/files/documents/31829-doc-African_Union_Handbook_2023_ENGLISH.pdf',
                 'page_start' => $from,
                 'page_end' => $to,
-                'meta' => ['page_start' => $from, 'page_end' => $to],
             ]
         );
 

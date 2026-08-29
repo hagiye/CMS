@@ -26,6 +26,8 @@ class CmsResourceTest extends TestCase
 
     private User $editor;
 
+    private ?ContentNode $editionNode = null;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -103,7 +105,7 @@ class CmsResourceTest extends TestCase
 
         Livewire::test(ChildrenRelationManager::class, $properties)
             ->callTableAction('create', null, [
-                'type' => 'article',
+                'type' => 'chapter',
                 'slug' => 'assembly-overview',
                 'position' => 1,
                 'status' => ContentNodeStatus::Draft->value,
@@ -189,11 +191,25 @@ class CmsResourceTest extends TestCase
 
     private function createNode(string $slug, int $position = 1, ?int $parentId = null): ContentNode
     {
+        $isSection = $parentId === null;
+
         return ContentNode::create([
-            'parent_id' => $parentId,
-            'type' => $parentId ? 'article' : 'section',
+            'parent_id' => $isSection ? $this->edition()->id : $parentId,
+            'type' => $isSection ? 'section' : 'chapter',
             'slug' => $slug,
             'position' => $position,
+            'status' => ContentNodeStatus::Draft,
+            'edition' => '2023',
+            'editor_id' => $this->editor->id,
+        ]);
+    }
+
+    private function edition(): ContentNode
+    {
+        return $this->editionNode ??= ContentNode::create([
+            'type' => 'edition',
+            'slug' => 'test-handbook-2023',
+            'position' => 1,
             'status' => ContentNodeStatus::Draft,
             'edition' => '2023',
             'editor_id' => $this->editor->id,

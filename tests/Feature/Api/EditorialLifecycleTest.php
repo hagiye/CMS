@@ -17,6 +17,8 @@ class EditorialLifecycleTest extends TestCase
 {
     use RefreshDatabase;
 
+    private ?ContentNode $editionNode = null;
+
     public function test_only_currently_published_nodes_and_children_are_public(): void
     {
         $parent = $this->createNode('published-section', ContentNodeStatus::Published, now(), [
@@ -27,11 +29,11 @@ class EditorialLifecycleTest extends TestCase
         ]);
         $this->createNode('published-child', ContentNodeStatus::Published, now(), [
             'parent_id' => $parent->id,
-            'type' => 'article',
+            'type' => 'chapter',
         ]);
         $this->createNode('draft-child', ContentNodeStatus::Draft, null, [
             'parent_id' => $parent->id,
-            'type' => 'article',
+            'type' => 'chapter',
         ]);
         $this->createNode('draft-section', ContentNodeStatus::Draft);
         $this->createNode('review-section', ContentNodeStatus::Review);
@@ -100,6 +102,7 @@ class EditorialLifecycleTest extends TestCase
     {
         $editor = User::factory()->create();
         $draft = ContentNode::create([
+            'parent_id' => $this->edition()->id,
             'type' => 'section',
             'slug' => 'new-draft',
             'position' => 1,
@@ -124,6 +127,10 @@ class EditorialLifecycleTest extends TestCase
         $publishedAt = null,
         array $attributes = [],
     ): ContentNode {
+        if (($attributes['type'] ?? 'section') === 'section' && ! isset($attributes['parent_id'])) {
+            $attributes['parent_id'] = $this->edition()->id;
+        }
+
         $node = ContentNode::create(array_merge([
             'type' => 'section',
             'slug' => $slug,
@@ -139,5 +146,17 @@ class EditorialLifecycleTest extends TestCase
         ]);
 
         return $node;
+    }
+
+    private function edition(): ContentNode
+    {
+        return $this->editionNode ??= ContentNode::create([
+            'type' => 'edition',
+            'slug' => 'test-handbook-2023',
+            'position' => 1,
+            'status' => ContentNodeStatus::Published,
+            'published_at' => now(),
+            'edition' => '2023',
+        ]);
     }
 }

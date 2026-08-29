@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ContentNodeResource\RelationManagers;
 
 use App\Enums\ContentNodeStatus;
+use App\Enums\ContentNodeType;
 use App\Models\ContentNode;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -21,12 +22,7 @@ class ChildrenRelationManager extends RelationManager
         return $form
             ->schema([
                 Forms\Components\Select::make('type')
-                    ->options([
-                        'section' => 'Section',
-                        'chapter' => 'Chapter',
-                        'article' => 'Article',
-                        'page' => 'Page',
-                    ])
+                    ->options($this->allowedChildTypes())
                     ->required()
                     ->native(false),
                 Forms\Components\TextInput::make('slug')
@@ -47,7 +43,10 @@ class ChildrenRelationManager extends RelationManager
                     ->label('Publish at')
                     ->seconds(false),
                 Forms\Components\TextInput::make('edition')
-                    ->maxLength(20),
+                    ->maxLength(20)
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->helperText('Inherited from the parent handbook edition.'),
                 Forms\Components\TextInput::make('source_page_start')
                     ->label('Source page start')
                     ->numeric()
@@ -61,6 +60,7 @@ class ChildrenRelationManager extends RelationManager
                     ->keyLabel('Key')
                     ->valueLabel('Value')
                     ->reorderable()
+                    ->helperText('Optional non-structural metadata only.')
                     ->columnSpanFull(),
             ])
             ->columns(2);
@@ -78,6 +78,7 @@ class ChildrenRelationManager extends RelationManager
                     ->sortable(),
                 Tables\Columns\TextColumn::make('type')
                     ->badge()
+                    ->formatStateUsing(fn (string $state): string => ContentNodeType::tryFrom($state)?->label() ?? $state)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
@@ -94,6 +95,7 @@ class ChildrenRelationManager extends RelationManager
             ->reorderable('position')
             ->headerActions([
                 Tables\Actions\CreateAction::make()
+                    ->visible(fn (): bool => $this->allowedChildTypes() !== [])
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['editor_id'] = auth()->id();
                         $data['revision'] = 1;
@@ -114,5 +116,13 @@ class ChildrenRelationManager extends RelationManager
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
             ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function allowedChildTypes(): array
+    {
+        return $this->getOwnerRecord()->nodeType()?->childOptions() ?? [];
     }
 }

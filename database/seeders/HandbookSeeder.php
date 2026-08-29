@@ -12,6 +12,22 @@ class HandbookSeeder extends Seeder
 {
     public function run(): void
     {
+        $edition = ContentNode::firstOrCreate(
+            ['slug' => 'au-handbook-2023'],
+            [
+                'type' => 'edition',
+                'position' => 1,
+                'status' => ContentNodeStatus::Published,
+                'published_at' => now(),
+                'edition' => '2023',
+            ],
+        );
+
+        ContentTranslation::updateOrCreate(
+            ['content_node_id' => $edition->id, 'locale' => 'en'],
+            ['title' => 'African Union Handbook 2023', 'body' => null],
+        );
+
         $sections = [
             ['slug' => 'member-states', 'title' => 'Member States', 'position' => 1],
             ['slug' => 'au-structure', 'title' => 'African Union Structure', 'position' => 2],
@@ -29,17 +45,19 @@ class HandbookSeeder extends Seeder
             $node = ContentNode::firstOrCreate(
                 ['slug' => $section['slug']],
                 [
+                    'parent_id' => $edition->id,
                     'type' => 'section',
                     'position' => $section['position'],
                     'status' => ContentNodeStatus::Published,
                     'published_at' => now(),
                     'edition' => '2023',
                     'source_page_start' => $section['source_page_start'] ?? null,
-                    'meta' => isset($section['source_page_start'])
-                        ? ['page_start' => $section['source_page_start']]
-                        : null,
                 ],
             );
+
+            if ($node->parent_id !== $edition->id) {
+                $node->update(['parent_id' => $edition->id]);
+            }
 
             ContentTranslation::updateOrCreate(
                 ['content_node_id' => $node->id, 'locale' => 'en'],

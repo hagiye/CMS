@@ -12,11 +12,13 @@ class ContentApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private ?ContentNode $editionNode = null;
+
     public function test_nodes_can_be_filtered_and_include_translated_children(): void
     {
         $section = $this->createNode('assembly', 'Assembly', position: 2);
         $this->createNode('member-states', 'Member States', position: 1);
-        $this->createNode('assembly-overview', 'Overview', 'article', 1, $section->id);
+        $this->createNode('assembly-overview', 'Overview', 'chapter', 1, $section->id);
 
         $response = $this->getJson('/api/v1/nodes?type=section&locale=en&include=children&per_page=1');
 
@@ -130,6 +132,10 @@ class ContentApiTest extends TestCase
         ?int $parentId = null,
         ?string $body = null,
     ): ContentNode {
+        if ($type === 'section' && $parentId === null) {
+            $parentId = $this->edition()->id;
+        }
+
         $node = ContentNode::create([
             'parent_id' => $parentId,
             'type' => $type,
@@ -146,5 +152,27 @@ class ContentApiTest extends TestCase
         ]);
 
         return $node;
+    }
+
+    private function edition(): ContentNode
+    {
+        if ($this->editionNode) {
+            return $this->editionNode;
+        }
+
+        $this->editionNode = ContentNode::create([
+            'type' => 'edition',
+            'slug' => 'test-handbook-2023',
+            'position' => 1,
+            'status' => 'published',
+            'published_at' => now(),
+            'edition' => '2023',
+        ]);
+        $this->editionNode->translations()->create([
+            'locale' => 'en',
+            'title' => 'Test Handbook 2023',
+        ]);
+
+        return $this->editionNode;
     }
 }

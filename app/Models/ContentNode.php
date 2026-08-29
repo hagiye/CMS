@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use App\Enums\ContentNodeStatus;
+use App\Enums\ContentNodeType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Validation\ValidationException;
 
 class ContentNode extends Model
 {
@@ -38,9 +40,23 @@ class ContentNode extends Model
     protected static function booted(): void
     {
         static::saving(function (ContentNode $node) {
+            $node->validateHierarchy();
+
             if ($node->status === ContentNodeStatus::Published && $node->published_at === null) {
                 $node->published_at = now();
             }
+        });
+
+        static::saved(function (ContentNode $node) {
+            if (! $node->wasChanged('edition')) {
+                return;
+            }
+
+            $node->children()->get()->each(function (ContentNode $child) use ($node) {
+                if ($child->edition !== $node->edition) {
+                    $child->update(['edition' => $node->edition]);
+                }
+            });
         });
     }
 
@@ -89,6 +105,16 @@ class ContentNode extends Model
         return $query->where('type', $type);
     }
 
+    public function scopeRoots($query)
+    {
+        return $query->whereNull('parent_id')->where('type', ContentNodeType::Edition->value);
+    }
+
+    public function scopeForEdition($query, string $edition)
+    {
+        return $query->where('edition', $edition);
+    }
+
     public function scopePublished($query)
     {
         return $query
@@ -102,5 +128,74 @@ class ContentNode extends Model
         return $this->status === ContentNodeStatus::Published
             && $this->published_at !== null
             && $this->published_at->isPast();
+    }
+
+    public function nodeType(): ?ContentNodeType
+    {
+        return ContentNodeType::tryFrom($this->type);
+    }
+
+    private function validateHierarchy(): void
+    {
+        $type = $this->nodeType();
+
+        if ($type === null) {
+            throw ValidationException::withMessages([
+                'type' => 'The selected content type is invalid.',
+            ]);
+        }
+
+        $expectedParentType = $type->parentType();
+
+        if ($expectedParentType === null) {
+            if ($this->parent_id !== null) {
+                throw ValidationException::withMessages([
+                    'parent_id' => 'A handbook edition cannot have a parent.',
+                ]);
+            }
+
+            if (blank($this->edition)) {
+                throw ValidationException::withMessages([
+                    'edition' => 'The edition is required for a handbook edition node.',
+                ]);
+            }
+        } else {
+            if ($this->parent_id === null) {
+                throw ValidationException::withMessages([
+                    'parent_id' => "A {$type->label()} must belong to a {$expectedParentType->label()}.",
+                ]);
+            }
+
+            $parent = static::query()->find($this->parent_id);
+
+            if (! $parent || $parent->nodeType() !== $expectedParentType) {
+                throw ValidationException::withMessages([
+                    'parent_id' => "A {$type->label()} must belong to a {$expectedParentType->label()}.",
+                ]);
+            }
+
+            if (blank($parent->edition)) {
+                throw ValidationException::withMessages([
+                    'parent_id' => 'The selected parent is not assigned to a handbook edition.',
+                ]);
+            }
+
+            $this->edition = $parent->edition;
+        }
+
+        if (! $this->exists) {
+            return;
+        }
+
+        $allowedChildTypes = array_keys($type->childOptions());
+        $hasInvalidChildren = $allowedChildTypes === []
+            ? $this->children()->exists()
+            : $this->children()->whereNotIn('type', $allowedChildTypes)->exists();
+
+        if ($hasInvalidChildren) {
+            throw ValidationException::withMessages([
+                'type' => 'This type is incompatible with one or more existing child nodes.',
+            ]);
+        }
     }
 }

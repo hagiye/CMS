@@ -22,7 +22,7 @@ class ContentController extends Controller
     public function index(Request $request)
     {
         $validated = $request->validate([
-            'type' => ['sometimes', 'string', 'in:section,chapter,article,page'],
+            'type' => ['sometimes', 'string', 'in:edition,section,chapter,article,page'],
             'locale' => self::LOCALE_RULE,
             'include' => ['sometimes', 'string', 'in:children'],
             'page' => ['sometimes', 'integer', 'min:1'],

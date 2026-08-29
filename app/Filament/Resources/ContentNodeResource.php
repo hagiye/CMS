@@ -3,10 +3,13 @@
 namespace App\Filament\Resources;
 
 use App\Enums\ContentNodeStatus;
+use App\Enums\ContentNodeType;
 use App\Filament\Resources\ContentNodeResource\Pages;
 use App\Models\ContentNode;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -28,18 +31,31 @@ class ContentNodeResource extends Resource
                 Forms\Components\Section::make('Content structure')
                     ->schema([
                         Forms\Components\Select::make('parent_id')
-                            ->relationship('parent', 'slug')
+                            ->options(function (Get $get, ?ContentNode $record): array {
+                                $parentType = ContentNodeType::tryFrom((string) $get('type'))?->parentType();
+
+                                if ($parentType === null) {
+                                    return [];
+                                }
+
+                                return ContentNode::query()
+                                    ->where('type', $parentType->value)
+                                    ->when($record, fn ($query) => $query->whereKeyNot($record->getKey()))
+                                    ->orderBy('edition', 'desc')
+                                    ->orderBy('position')
+                                    ->pluck('slug', 'id')
+                                    ->all();
+                            })
+                            ->required(fn (Get $get): bool => ContentNodeType::tryFrom((string) $get('type'))?->parentType() !== null)
+                            ->disabled(fn (Get $get): bool => ContentNodeType::tryFrom((string) $get('type'))?->parentType() === null)
                             ->searchable()
                             ->preload()
                             ->label('Parent node'),
                         Forms\Components\Select::make('type')
-                            ->options([
-                                'section' => 'Section',
-                                'chapter' => 'Chapter',
-                                'article' => 'Article',
-                                'page' => 'Page',
-                            ])
+                            ->options(ContentNodeType::options())
                             ->required()
+                            ->live()
+                            ->afterStateUpdated(fn (Set $set) => $set('parent_id', null))
                             ->native(false),
                         Forms\Components\TextInput::make('slug')
                             ->required()
@@ -65,8 +81,12 @@ class ContentNodeResource extends Resource
                             ->seconds(false)
                             ->helperText('Required for public visibility. It is set automatically when publishing.'),
                         Forms\Components\TextInput::make('edition')
+                            ->required(fn (Get $get): bool => $get('type') === ContentNodeType::Edition->value)
+                            ->disabled(fn (Get $get): bool => $get('type') !== ContentNodeType::Edition->value)
+                            ->dehydrated(fn (Get $get): bool => $get('type') === ContentNodeType::Edition->value)
                             ->maxLength(20)
-                            ->placeholder('2023'),
+                            ->placeholder('2023')
+                            ->helperText('Child nodes inherit this value from their handbook edition.'),
                         Forms\Components\TextInput::make('revision')
                             ->numeric()
                             ->minValue(1)
@@ -95,6 +115,7 @@ class ContentNodeResource extends Resource
                     ->keyLabel('Key')
                     ->valueLabel('Value')
                     ->reorderable()
+                    ->helperText('Optional non-structural metadata only. Hierarchy, edition, status, and page ranges use dedicated fields.')
                     ->columnSpanFull(),
             ]);
     }
@@ -103,11 +124,20 @@ class ContentNodeResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('position')
+                    ->label('Order')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('slug')
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('parent.slug')
+                    ->label('Parent')
+                    ->searchable()
+                    ->placeholder('Handbook root')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('type')
                     ->badge()
+                    ->formatStateUsing(fn (string $state): string => ContentNodeType::tryFrom($state)?->label() ?? $state)
                     ->sortable(),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
@@ -137,13 +167,20 @@ class ContentNodeResource extends Resource
             ])
             ->defaultSort('position')
             ->filters([
+                Tables\Filters\SelectFilter::make('parent_id')
+                    ->relationship('parent', 'slug')
+                    ->searchable()
+                    ->preload()
+                    ->label('Parent'),
                 Tables\Filters\SelectFilter::make('type')
-                    ->options([
-                        'section' => 'Section',
-                        'chapter' => 'Chapter',
-                        'article' => 'Article',
-                        'page' => 'Page',
-                    ]),
+                    ->options(ContentNodeType::options()),
+                Tables\Filters\SelectFilter::make('edition')
+                    ->options(fn (): array => ContentNode::query()
+                        ->whereNotNull('edition')
+                        ->distinct()
+                        ->orderByDesc('edition')
+                        ->pluck('edition', 'edition')
+                        ->all()),
                 Tables\Filters\SelectFilter::make('status')
                     ->options(ContentNodeStatus::options()),
                 Tables\Filters\TrashedFilter::make(),

@@ -13,6 +13,8 @@ class BookmarkApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private ?ContentNode $editionNode = null;
+
     public function test_authenticated_user_can_create_a_bookmark_idempotently(): void
     {
         $user = User::factory()->create();
@@ -82,6 +84,7 @@ class BookmarkApiTest extends TestCase
     private function createNode(string $slug = 'assembly', string $title = 'Assembly'): ContentNode
     {
         $node = ContentNode::create([
+            'parent_id' => $this->edition()->id,
             'type' => 'section',
             'slug' => $slug,
             'position' => 1,
@@ -95,5 +98,17 @@ class BookmarkApiTest extends TestCase
         ]);
 
         return $node;
+    }
+
+    private function edition(): ContentNode
+    {
+        return $this->editionNode ??= ContentNode::create([
+            'type' => 'edition',
+            'slug' => 'test-handbook-2023',
+            'position' => 1,
+            'status' => 'published',
+            'published_at' => now(),
+            'edition' => '2023',
+        ]);
     }
 }

@@ -21,6 +21,7 @@ class ContentNodeResource extends JsonResource
 
         return [
             'id' => $this->id,
+            'parent_id' => $this->parent_id,
             'slug' => $this->slug,
             'type' => $this->type,
             'position' => $this->position,
