@@ -1,0 +1,163 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Enums\ContentNodeStatus;
+use App\Filament\Resources\ContentNodeResource\Pages;
+use App\Models\ContentNode;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+
+class ContentNodeResource extends Resource
+{
+    protected static ?string $model = ContentNode::class;
+
+    protected static ?string $navigationGroup = 'Handbook';
+
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+
+    protected static ?string $navigationLabel = 'Content';
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Section::make('Content structure')
+                    ->schema([
+                        Forms\Components\Select::make('parent_id')
+                            ->relationship('parent', 'slug')
+                            ->searchable()
+                            ->preload()
+                            ->label('Parent node'),
+                        Forms\Components\Select::make('type')
+                            ->options([
+                                'section' => 'Section',
+                                'chapter' => 'Chapter',
+                                'article' => 'Article',
+                                'page' => 'Page',
+                            ])
+                            ->required()
+                            ->native(false),
+                        Forms\Components\TextInput::make('slug')
+                            ->required()
+                            ->maxLength(255)
+                            ->unique(ignoreRecord: true),
+                        Forms\Components\TextInput::make('position')
+                            ->required()
+                            ->numeric()
+                            ->minValue(0)
+                            ->default(0),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Section::make('Editorial lifecycle')
+                    ->schema([
+                        Forms\Components\Select::make('status')
+                            ->options(ContentNodeStatus::options())
+                            ->required()
+                            ->default(ContentNodeStatus::Draft->value)
+                            ->native(false),
+                        Forms\Components\DateTimePicker::make('published_at')
+                            ->label('Publish at')
+                            ->seconds(false)
+                            ->helperText('Required for public visibility. It is set automatically when publishing.'),
+                        Forms\Components\TextInput::make('edition')
+                            ->maxLength(20)
+                            ->placeholder('2023'),
+                        Forms\Components\TextInput::make('revision')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(1)
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText('Incremented automatically whenever this node is edited.'),
+                        Forms\Components\TextInput::make('source_page_start')
+                            ->label('Source page start')
+                            ->numeric()
+                            ->minValue(1),
+                        Forms\Components\TextInput::make('source_page_end')
+                            ->label('Source page end')
+                            ->numeric()
+                            ->minValue(1)
+                            ->gte('source_page_start'),
+                        Forms\Components\Select::make('editor_id')
+                            ->relationship('editor', 'name')
+                            ->label('Last editor')
+                            ->disabled()
+                            ->dehydrated(false),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\KeyValue::make('meta')
+                    ->keyLabel('Key')
+                    ->valueLabel('Value')
+                    ->reorderable()
+                    ->columnSpanFull(),
+            ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('slug')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('type')
+                    ->badge()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('status')
+                    ->badge()
+                    ->formatStateUsing(fn (ContentNodeStatus $state): string => $state->label())
+                    ->color(fn (ContentNodeStatus $state): string => match ($state) {
+                        ContentNodeStatus::Draft => 'gray',
+                        ContentNodeStatus::Review => 'warning',
+                        ContentNodeStatus::Published => 'success',
+                        ContentNodeStatus::Archived => 'danger',
+                    })
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('edition')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('revision')
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('editor.name')
+                    ->label('Last editor')
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('published_at')
+                    ->dateTime()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->defaultSort('position')
+            ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->options(ContentNodeStatus::options()),
+                Tables\Filters\TrashedFilter::make(),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\RestoreBulkAction::make(),
+                ]),
+            ]);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListContentNodes::route('/'),
+            'create' => Pages\CreateContentNode::route('/create'),
+            'edit' => Pages\EditContentNode::route('/{record}/edit'),
+        ];
+    }
+}
