@@ -3,12 +3,12 @@
 namespace App\Console\Commands;
 
 use App\Enums\ContentNodeStatus;
-use Illuminate\Console\Command;
-use Illuminate\Support\Str;
-use Smalot\PdfParser\Parser;
 use App\Models\ContentNode;
 use App\Models\ContentTranslation;
 use App\Models\Document;
+use Illuminate\Console\Command;
+use Illuminate\Support\Str;
+use Smalot\PdfParser\Parser;
 
 class ImportHandbook extends Command
 {
@@ -27,17 +27,19 @@ class ImportHandbook extends Command
     public function handle(): int
     {
         $pdfPath = (string) $this->argument('pdfPath');
-        $lang    = (string) $this->option('lang');
-        $from    = (int) $this->option('from');
-        $to      = (int) $this->option('to');
+        $lang = (string) $this->option('lang');
+        $from = (int) $this->option('from');
+        $to = (int) $this->option('to');
 
         if (! file_exists($pdfPath)) {
             $this->error("PDF not found at: {$pdfPath}");
+
             return self::FAILURE;
         }
 
         if ($from <= 0 || $to < $from) {
             $this->error('--from must be >= 1 and --to must be >= --from');
+
             return self::FAILURE;
         }
 
@@ -48,22 +50,25 @@ class ImportHandbook extends Command
         $this->info("Parsing PDF: {$pdfPath} (pages {$from}-{$to}, lang={$lang})");
 
         // Parse PDF
-        $parser = new Parser();
+        $parser = new Parser;
         try {
-            $pdf   = $parser->parseFile($pdfPath);
+            $pdf = $parser->parseFile($pdfPath);
             $pages = $pdf->getPages();
         } catch (\Throwable $e) {
             $this->error('Failed to parse PDF: '.$e->getMessage());
+
             return self::FAILURE;
         }
 
         $totalPages = count($pages);
         if ($totalPages === 0) {
             $this->error('No pages found in the PDF.');
+
             return self::FAILURE;
         }
         if ($from > $totalPages) {
             $this->error("Start page {$from} exceeds total pages {$totalPages}.");
+
             return self::FAILURE;
         }
         $to = min($to, $totalPages);
@@ -72,13 +77,13 @@ class ImportHandbook extends Command
         $section = ContentNode::firstOrCreate(
             ['slug' => 'african-union-commission-2023'],
             [
-                'type'     => 'section',
+                'type' => 'section',
                 'position' => 1,
                 'status' => ContentNodeStatus::Draft,
                 'edition' => '2023',
                 'source_page_start' => $from,
                 'source_page_end' => $to,
-                'meta'     => ['page_start' => $from, 'page_end' => $to],
+                'meta' => ['page_start' => $from, 'page_end' => $to],
             ]
         );
 
@@ -93,12 +98,12 @@ class ImportHandbook extends Command
             ['content_node_id' => $section->id, 'kind' => 'pdf', 'title' => 'AU Handbook 2023 (EN)'],
             [
                 'external_url' => 'https://au.int/sites/default/files/documents/31829-doc-African_Union_Handbook_2023_ENGLISH.pdf',
-                'meta'         => ['page_start' => $from, 'page_end' => $to],
+                'meta' => ['page_start' => $from, 'page_end' => $to],
             ]
         );
 
         // Extract a curated text slice for search (keep it concise)
-        $this->info("Extracting text …");
+        $this->info('Extracting text …');
         $buffer = [];
         for ($i = $from; $i <= $to; $i++) {
             $pageObj = $pages[$i - 1] ?? null;
@@ -134,7 +139,8 @@ class ImportHandbook extends Command
         $text = preg_replace('/[ \t]+/u', ' ', $text) ?? $text;
         $text = preg_replace("/\n{3,}/u", "\n\n", $text) ?? $text;
         // Trim lines
-        $lines = array_map(static fn($l) => trim($l), explode("\n", $text));
+        $lines = array_map(static fn ($l) => trim($l), explode("\n", $text));
+
         return trim(implode("\n", $lines));
     }
 }

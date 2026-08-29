@@ -25,14 +25,20 @@ class EditorialLifecycleTest extends TestCase
             'source_page_end' => 12,
             'revision' => 3,
         ]);
-        $this->createNode('published-child', ContentNodeStatus::Published, now(), ['parent_id' => $parent->id]);
-        $this->createNode('draft-child', ContentNodeStatus::Draft, null, ['parent_id' => $parent->id]);
+        $this->createNode('published-child', ContentNodeStatus::Published, now(), [
+            'parent_id' => $parent->id,
+            'type' => 'article',
+        ]);
+        $this->createNode('draft-child', ContentNodeStatus::Draft, null, [
+            'parent_id' => $parent->id,
+            'type' => 'article',
+        ]);
         $this->createNode('draft-section', ContentNodeStatus::Draft);
         $this->createNode('review-section', ContentNodeStatus::Review);
         $this->createNode('archived-section', ContentNodeStatus::Archived, now()->subDay());
         $this->createNode('scheduled-section', ContentNodeStatus::Published, now()->addDay());
 
-        $this->getJson('/api/v1/nodes?include=children')
+        $this->getJson('/api/v1/nodes?type=section&include=children')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.slug', 'published-section')
