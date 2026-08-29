@@ -103,6 +103,17 @@ class ContentNodeResource extends Resource
                             ->numeric()
                             ->minValue(1)
                             ->gte('source_page_start'),
+                        Forms\Components\Select::make('source_document_id')
+                            ->relationship('sourceDocument', 'title')
+                            ->label('Source PDF')
+                            ->searchable()
+                            ->preload()
+                            ->helperText('The PDF from which this content was extracted.'),
+                        Forms\Components\TextInput::make('import_key')
+                            ->label('Import key')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText('Stable identifier used to prevent duplicate PDF imports.'),
                         Forms\Components\Select::make('editor_id')
                             ->relationship('editor', 'name')
                             ->label('Last editor')
@@ -154,6 +165,10 @@ class ContentNodeResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('revision')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('sourceDocument.title')
+                    ->label('Source PDF')
+                    ->limit(35)
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('editor.name')
                     ->label('Last editor')
                     ->toggleable(),

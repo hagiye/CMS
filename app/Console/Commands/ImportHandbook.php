@@ -3,161 +3,492 @@
 namespace App\Console\Commands;
 
 use App\Enums\ContentNodeStatus;
+use App\Enums\ContentNodeType;
 use App\Models\ContentNode;
 use App\Models\ContentTranslation;
 use App\Models\Document;
+use App\Services\HandbookPdfInspector;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Smalot\PdfParser\Parser;
+use RuntimeException;
+use Throwable;
 
 class ImportHandbook extends Command
 {
-    /**
-     * Usage:
-     * php artisan handbook:import storage/app/Handbook_2023_EN.pdf --from=92 --to=110 --lang=en
-     */
-    protected $signature = 'handbook:import 
-                            {pdfPath : Absolute or relative path to the PDF} 
-                            {--lang=en : Locale for the translation (e.g., en, fr)} 
-                            {--from=92 : Start page (1-based, inclusive)} 
-                            {--to=110 : End page (1-based, inclusive)}';
+    protected $signature = 'handbook:import
+                            {pdfPath : Absolute or relative path to the PDF}
+                            {--lang=en : Locale for extracted translations}
+                            {--edition=2023 : Handbook edition}
+                            {--from=1 : Start page (1-based, inclusive)}
+                            {--to=99999 : End page (1-based, inclusive)}
+                            {--section=African Union Commission : Parent section title}
+                            {--section-slug= : Existing or proposed section slug}
+                            {--chapter= : Chapter title for this imported range}
+                            {--source-url= : Optional canonical source URL}
+                            {--commit : Persist the previewed import}
+                            {--force : Commit without an interactive confirmation}
+                            {--refresh : Replace extracted translations on existing draft/review nodes}';
 
-    protected $description = 'Import curated text and a canonical PDF reference for the AU Handbook';
+    protected $description = 'Preview and optionally import a handbook PDF as reviewable draft content';
+
+    public function __construct(private readonly HandbookPdfInspector $inspector)
+    {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
-        $pdfPath = (string) $this->argument('pdfPath');
-        $lang = (string) $this->option('lang');
+        $path = realpath((string) $this->argument('pdfPath'));
+        $lang = trim((string) $this->option('lang'));
+        $edition = trim((string) $this->option('edition'));
         $from = (int) $this->option('from');
         $to = (int) $this->option('to');
+        $sectionTitle = trim((string) $this->option('section'));
+        $sourceUrl = trim((string) $this->option('source-url')) ?: null;
 
-        if (! file_exists($pdfPath)) {
-            $this->error("PDF not found at: {$pdfPath}");
-
-            return self::FAILURE;
-        }
-
-        if ($from <= 0 || $to < $from) {
-            $this->error('--from must be >= 1 and --to must be >= --from');
+        if ($path === false || ! is_file($path)) {
+            $this->error('PDF not found: '.(string) $this->argument('pdfPath'));
 
             return self::FAILURE;
         }
 
-        // Parsing can be heavy; give PHP a little headroom.
+        if (strtolower((string) pathinfo($path, PATHINFO_EXTENSION)) !== 'pdf') {
+            $this->error('The import source must be a PDF file.');
+
+            return self::FAILURE;
+        }
+
+        if ($from < 1 || $to < $from) {
+            $this->error('--from must be at least 1 and --to must be greater than or equal to --from.');
+
+            return self::FAILURE;
+        }
+
+        if (! preg_match('/^[a-z]{2}(?:[-_][A-Za-z]{2})?$/', $lang)) {
+            $this->error('--lang must be a two-letter locale, optionally followed by a region.');
+
+            return self::FAILURE;
+        }
+
+        if ($edition === '' || mb_strlen($edition) > 20 || $sectionTitle === '') {
+            $this->error('--edition and --section are required; edition may not exceed 20 characters.');
+
+            return self::FAILURE;
+        }
+
+        if ($sourceUrl !== null && filter_var($sourceUrl, FILTER_VALIDATE_URL) === false) {
+            $this->error('--source-url must be a valid URL.');
+
+            return self::FAILURE;
+        }
+
         @ini_set('memory_limit', '1024M');
         @set_time_limit(0);
 
-        $this->info("Parsing PDF: {$pdfPath} (pages {$from}-{$to}, lang={$lang})");
+        $this->info("Inspecting {$path} (requested pages {$from}-{$to})...");
 
-        // Parse PDF
-        $parser = new Parser;
         try {
-            $pdf = $parser->parseFile($pdfPath);
-            $pages = $pdf->getPages();
-        } catch (\Throwable $e) {
-            $this->error('Failed to parse PDF: '.$e->getMessage());
+            $inspection = $this->inspector->inspect($path, $from, $to);
+            $checksum = hash_file('sha256', $path);
+        } catch (Throwable $exception) {
+            $this->error($exception->getMessage());
 
             return self::FAILURE;
         }
 
-        $totalPages = count($pages);
-        if ($totalPages === 0) {
-            $this->error('No pages found in the PDF.');
+        if ($checksum === false) {
+            $this->error('The PDF checksum could not be calculated.');
 
             return self::FAILURE;
         }
-        if ($from > $totalPages) {
-            $this->error("Start page {$from} exceeds total pages {$totalPages}.");
+
+        if ($inspection['to'] < $to) {
+            $this->warn("The PDF has {$inspection['total_pages']} pages; the import range ends at page {$inspection['to']}.");
+        }
+
+        $sectionSlug = Str::slug(trim((string) $this->option('section-slug')));
+        $sectionSlug = $sectionSlug !== ''
+            ? $sectionSlug
+            : Str::slug($sectionTitle).'-'.Str::slug($edition);
+        $chapterTitle = trim((string) $this->option('chapter'));
+        $chapterTitle = $chapterTitle !== ''
+            ? $chapterTitle
+            : "Imported pages {$inspection['from']}-{$inspection['to']}";
+        $segments = $this->prepareSegments(
+            $inspection['segments'],
+            $checksum,
+            $lang,
+            $sectionSlug,
+        );
+
+        $this->renderFailures($inspection['failures']);
+
+        if ($segments === []) {
+            $this->error('No meaningful content segments could be extracted. Nothing can be imported.');
 
             return self::FAILURE;
         }
-        $to = min($to, $totalPages);
 
-        $edition = ContentNode::firstOrCreate(
-            ['slug' => 'au-handbook-2023'],
-            [
-                'type' => 'edition',
-                'position' => 1,
-                'status' => ContentNodeStatus::Draft,
-                'edition' => '2023',
-            ],
+        $this->newLine();
+        $this->info('IMPORT PREVIEW — no records have been changed');
+        $this->table(
+            ['#', 'Proposed title', 'Pages', 'Characters', 'Proposed slug'],
+            array_map(
+                fn (array $segment, int $index): array => [
+                    $index + 1,
+                    $segment['title'],
+                    $segment['page_start'] === $segment['page_end']
+                        ? (string) $segment['page_start']
+                        : $segment['page_start'].'-'.$segment['page_end'],
+                    mb_strlen($segment['body']),
+                    $segment['slug'],
+                ],
+                $segments,
+                array_keys($segments),
+            ),
         );
+        $this->line(sprintf(
+            '%d segments from %d parsed pages; %d pages could not be parsed. All new content will be draft.',
+            count($segments),
+            count($inspection['pages']),
+            count($inspection['failures']),
+        ));
 
-        ContentTranslation::updateOrCreate(
-            ['content_node_id' => $edition->id, 'locale' => $lang],
-            ['title' => 'African Union Handbook 2023', 'body' => null],
-        );
+        if (! $this->option('commit')) {
+            $this->newLine();
+            $this->info('Preview complete. Run again with --commit after reviewing the proposed sections.');
 
-        // Create/ensure node for AUC
-        $section = ContentNode::firstOrCreate(
-            ['slug' => 'african-union-commission-2023'],
-            [
-                'parent_id' => $edition->id,
-                'type' => 'section',
-                'position' => 1,
-                'status' => ContentNodeStatus::Draft,
-                'edition' => '2023',
-                'source_page_start' => $from,
-                'source_page_end' => $to,
-            ]
-        );
-
-        $section->update([
-            'parent_id' => $edition->id,
-            'edition' => '2023',
-            'source_page_start' => $from,
-            'source_page_end' => $to,
-        ]);
-
-        // Link canonical AU PDF
-        Document::updateOrCreate(
-            ['content_node_id' => $section->id, 'kind' => 'pdf', 'title' => 'AU Handbook 2023 (EN)'],
-            [
-                'external_url' => 'https://au.int/sites/default/files/documents/31829-doc-African_Union_Handbook_2023_ENGLISH.pdf',
-                'page_start' => $from,
-                'page_end' => $to,
-            ]
-        );
-
-        // Extract a curated text slice for search (keep it concise)
-        $this->info('Extracting text …');
-        $buffer = [];
-        for ($i = $from; $i <= $to; $i++) {
-            $pageObj = $pages[$i - 1] ?? null;
-            if (! $pageObj) {
-                continue;
-            }
-            $raw = $pageObj->getText();
-            $buffer[] = $this->cleanText($raw);
+            return self::SUCCESS;
         }
 
-        $joined = trim(implode("\n\n", array_filter($buffer)));
-        // Limit to ~5k chars to avoid huge rows; adjust if you need more for search
-        $snippet = Str::limit($joined, 5000, ' …');
+        if (! $this->option('force') && ! $this->confirm('Commit this draft import?', false)) {
+            $this->warn('Import cancelled; no records were changed.');
 
-        ContentTranslation::updateOrCreate(
-            ['content_node_id' => $section->id, 'locale' => $lang],
-            ['title' => 'African Union Commission', 'body' => $snippet]
-        );
+            return self::SUCCESS;
+        }
 
-        $this->info("Imported: African Union Commission (pages {$from}-{$to}, lang={$lang})");
+        try {
+            $storedPath = $this->storeSourcePdf($path, $edition, $checksum);
+            $result = DB::transaction(fn (): array => $this->persistImport(
+                $path,
+                $storedPath,
+                $sourceUrl,
+                $checksum,
+                $edition,
+                $lang,
+                $sectionTitle,
+                $sectionSlug,
+                $chapterTitle,
+                $inspection,
+                $segments,
+                (bool) $this->option('refresh'),
+            ));
+        } catch (Throwable $exception) {
+            $this->error('Import failed: '.$exception->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $this->newLine();
+        $this->info(sprintf(
+            'Draft import complete: %d nodes created, %d reused, %d translations refreshed.',
+            $result['created'],
+            $result['reused'],
+            $result['refreshed'],
+        ));
+        $this->line('The extracted text is ready for review and correction in Filament. Nothing was published.');
 
         return self::SUCCESS;
     }
 
     /**
-     * Normalize whitespace, strip odd control chars, and collapse runs.
+     * @param  array<int, array{title: string, body: string, page_start: int, page_end: int}>  $segments
+     * @return array<int, array{title: string, body: string, page_start: int, page_end: int, import_key: string, slug: string, position: int}>
      */
-    protected function cleanText(string $text): string
+    private function prepareSegments(array $segments, string $checksum, string $lang, string $sectionSlug): array
     {
-        // Replace non-breaking spaces and control chars with regular space
-        $text = preg_replace('/[\x{00}-\x{1F}\x{7F}\x{A0}]+/u', ' ', $text) ?? $text;
-        // Collapse multiple spaces/newlines
-        $text = preg_replace('/[ \t]+/u', ' ', $text) ?? $text;
-        $text = preg_replace("/\n{3,}/u", "\n\n", $text) ?? $text;
-        // Trim lines
-        $lines = array_map(static fn ($l) => trim($l), explode("\n", $text));
+        $occurrences = [];
 
-        return trim(implode("\n", $lines));
+        foreach ($segments as $index => &$segment) {
+            $identity = mb_strtolower($segment['title']).'|'.$segment['page_start'].'|'.$segment['page_end'];
+            $occurrences[$identity] = ($occurrences[$identity] ?? 0) + 1;
+            $occurrence = $occurrences[$identity];
+            $segment['import_key'] = hash(
+                'sha256',
+                implode('|', [$checksum, 'segment', $sectionSlug, $lang, $identity, $occurrence]),
+            );
+            $slugTitle = Str::slug($segment['title']) ?: 'content';
+            $segment['slug'] = Str::limit(
+                $sectionSlug.'-p'.$segment['page_start'].'-'.$slugTitle,
+                220,
+                '',
+            );
+            if ($occurrence > 1) {
+                $segment['slug'] .= '-'.$occurrence;
+            }
+            $segment['position'] = $index + 1;
+        }
+        unset($segment);
+
+        return $segments;
+    }
+
+    /**
+     * @param  array<int, string>  $failures
+     */
+    private function renderFailures(array $failures): void
+    {
+        if ($failures === []) {
+            return;
+        }
+
+        $this->newLine();
+        $this->warn('Pages requiring manual attention:');
+        $this->table(
+            ['Page', 'Reason'],
+            array_map(
+                fn (int $page, string $reason): array => [$page, $reason],
+                array_keys($failures),
+                array_values($failures),
+            ),
+        );
+    }
+
+    private function storeSourcePdf(string $sourcePath, string $edition, string $checksum): string
+    {
+        $storedPath = 'handbook-documents/imports/'.Str::slug($edition).'/'.$checksum.'.pdf';
+        $disk = Storage::disk('public');
+
+        if ($disk->exists($storedPath)) {
+            return $storedPath;
+        }
+
+        $stream = fopen($sourcePath, 'rb');
+
+        if ($stream === false) {
+            throw new RuntimeException('The source PDF could not be opened for storage.');
+        }
+
+        try {
+            if (! $disk->put($storedPath, $stream)) {
+                throw new RuntimeException('The source PDF could not be copied to public storage.');
+            }
+        } finally {
+            fclose($stream);
+        }
+
+        return $storedPath;
+    }
+
+    /**
+     * @param  array{total_pages: int, from: int, to: int, pages: array<int, array{number: int, text: string}>, failures: array<int, string>, segments: array}  $inspection
+     * @param  array<int, array{title: string, body: string, page_start: int, page_end: int, import_key: string, slug: string, position: int}>  $segments
+     * @return array{created: int, reused: int, refreshed: int}
+     */
+    private function persistImport(
+        string $sourcePath,
+        string $storedPath,
+        ?string $sourceUrl,
+        string $checksum,
+        string $edition,
+        string $lang,
+        string $sectionTitle,
+        string $sectionSlug,
+        string $chapterTitle,
+        array $inspection,
+        array $segments,
+        bool $refresh,
+    ): array {
+        $counts = ['created' => 0, 'reused' => 0, 'refreshed' => 0];
+        $editionNode = ContentNode::query()
+            ->where('type', ContentNodeType::Edition->value)
+            ->where('edition', $edition)
+            ->first();
+
+        if ($editionNode === null) {
+            $editionNode = ContentNode::create([
+                'type' => ContentNodeType::Edition->value,
+                'slug' => $this->availableSlug('au-handbook-'.Str::slug($edition)),
+                'position' => 1,
+                'status' => ContentNodeStatus::Draft,
+                'edition' => $edition,
+            ]);
+            $counts['created']++;
+        } else {
+            $counts['reused']++;
+        }
+
+        $counts['refreshed'] += $this->writeTranslation(
+            $editionNode,
+            $lang,
+            "African Union Handbook {$edition}",
+            null,
+            $refresh,
+        );
+
+        $document = Document::query()
+            ->where('checksum', $checksum)
+            ->first();
+
+        if ($document === null) {
+            $document = Document::create([
+                'content_node_id' => $editionNode->id,
+                'kind' => 'pdf',
+                'title' => "African Union Handbook {$edition} (".strtoupper($lang).')',
+                'path' => $storedPath,
+                'external_url' => $sourceUrl,
+                'page_start' => $inspection['from'],
+                'page_end' => $inspection['to'],
+                'checksum' => $checksum,
+                'original_filename' => basename($sourcePath),
+                'imported_at' => now(),
+            ]);
+        } else {
+            $document->update([
+                'path' => $storedPath,
+                'external_url' => $sourceUrl ?? $document->external_url,
+                'page_start' => min($document->page_start ?? $inspection['from'], $inspection['from']),
+                'page_end' => max($document->page_end ?? $inspection['to'], $inspection['to']),
+            ]);
+        }
+
+        $section = ContentNode::query()->where('slug', $sectionSlug)->first();
+
+        if ($section === null) {
+            $section = ContentNode::create([
+                'parent_id' => $editionNode->id,
+                'type' => ContentNodeType::Section->value,
+                'slug' => $sectionSlug,
+                'position' => ((int) $editionNode->children()->max('position')) + 1,
+                'status' => ContentNodeStatus::Draft,
+                'edition' => $edition,
+                'source_page_start' => $inspection['from'],
+                'source_page_end' => $inspection['to'],
+                'source_document_id' => $document->id,
+            ]);
+            $counts['created']++;
+        } else {
+            $this->assertNode($section, ContentNodeType::Section, $editionNode->id, '--section-slug');
+            $counts['reused']++;
+        }
+
+        $counts['refreshed'] += $this->writeTranslation($section, $lang, $sectionTitle, null, $refresh);
+
+        $chapterKey = hash(
+            'sha256',
+            implode('|', [$checksum, 'chapter', $sectionSlug, $lang, $inspection['from'], $inspection['to']]),
+        );
+        $chapter = ContentNode::query()->where('import_key', $chapterKey)->first();
+
+        if ($chapter === null) {
+            $chapter = ContentNode::create([
+                'parent_id' => $section->id,
+                'type' => ContentNodeType::Chapter->value,
+                'slug' => $this->availableSlug(
+                    $sectionSlug.'-import-'.$inspection['from'].'-'.$inspection['to'],
+                    $chapterKey,
+                ),
+                'position' => ((int) $section->children()->max('position')) + 1,
+                'status' => ContentNodeStatus::Draft,
+                'edition' => $edition,
+                'source_page_start' => $inspection['from'],
+                'source_page_end' => $inspection['to'],
+                'source_document_id' => $document->id,
+                'import_key' => $chapterKey,
+            ]);
+            $counts['created']++;
+        } else {
+            $this->assertNode($chapter, ContentNodeType::Chapter, $section->id, 'import chapter');
+            $counts['reused']++;
+        }
+
+        $counts['refreshed'] += $this->writeTranslation($chapter, $lang, $chapterTitle, null, $refresh);
+
+        foreach ($segments as $segment) {
+            $node = ContentNode::query()->where('import_key', $segment['import_key'])->first();
+
+            if ($node === null) {
+                $node = ContentNode::create([
+                    'parent_id' => $chapter->id,
+                    'type' => ContentNodeType::Page->value,
+                    'slug' => $this->availableSlug($segment['slug'], $segment['import_key']),
+                    'position' => $segment['position'],
+                    'status' => ContentNodeStatus::Draft,
+                    'edition' => $edition,
+                    'source_page_start' => $segment['page_start'],
+                    'source_page_end' => $segment['page_end'],
+                    'source_document_id' => $document->id,
+                    'import_key' => $segment['import_key'],
+                ]);
+                $counts['created']++;
+            } else {
+                $this->assertNode($node, ContentNodeType::Page, $chapter->id, 'import segment');
+                $counts['reused']++;
+            }
+
+            $counts['refreshed'] += $this->writeTranslation(
+                $node,
+                $lang,
+                $segment['title'],
+                $this->richText($segment['body']),
+                $refresh,
+            );
+        }
+
+        return $counts;
+    }
+
+    private function assertNode(ContentNode $node, ContentNodeType $type, int $parentId, string $source): void
+    {
+        if ($node->nodeType() !== $type || (int) $node->parent_id !== $parentId) {
+            throw new RuntimeException("The existing {$source} points to an incompatible content node.");
+        }
+    }
+
+    private function availableSlug(string $proposed, ?string $importKey = null): string
+    {
+        $proposed = Str::limit(Str::slug($proposed), 220, '');
+        $existing = ContentNode::query()->where('slug', $proposed)->first();
+
+        if ($existing === null || ($importKey !== null && $existing->import_key === $importKey)) {
+            return $proposed;
+        }
+
+        return $proposed.'-'.substr($importKey ?? hash('sha256', $proposed.microtime()), 0, 8);
+    }
+
+    private function writeTranslation(
+        ContentNode $node,
+        string $locale,
+        string $title,
+        ?string $body,
+        bool $refresh,
+    ): int {
+        $translation = ContentTranslation::query()->firstOrCreate(
+            ['content_node_id' => $node->id, 'locale' => $locale],
+            ['title' => $title, 'body' => $body],
+        );
+
+        if (! $translation->wasRecentlyCreated
+            && $refresh
+            && in_array($node->status, [ContentNodeStatus::Draft, ContentNodeStatus::Review], true)) {
+            $translation->update(['title' => $title, 'body' => $body]);
+
+            return 1;
+        }
+
+        return 0;
+    }
+
+    private function richText(string $text): string
+    {
+        $paragraphs = preg_split('/\n{2,}/u', trim($text)) ?: [];
+
+        return implode('', array_map(
+            fn (string $paragraph): string => '<p>'.nl2br(e($paragraph), false).'</p>',
+            $paragraphs,
+        ));
     }
 }

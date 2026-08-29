@@ -69,6 +69,19 @@ class DocumentResource extends Resource
                 ->numeric()
                 ->minValue(1)
                 ->gte('page_start'),
+            Forms\Components\TextInput::make('original_filename')
+                ->label('Original filename')
+                ->disabled()
+                ->dehydrated(false),
+            Forms\Components\TextInput::make('checksum')
+                ->label('SHA-256 checksum')
+                ->disabled()
+                ->dehydrated(false),
+            Forms\Components\DateTimePicker::make('imported_at')
+                ->label('Imported at')
+                ->disabled()
+                ->dehydrated(false)
+                ->seconds(false),
             Forms\Components\KeyValue::make('meta')
                 ->keyLabel('Key')
                 ->valueLabel('Value')
@@ -110,6 +123,15 @@ class DocumentResource extends Resource
                     ->label('Uploaded file')
                     ->limit(35)
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('original_filename')
+                    ->label('Original filename')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('checksum')
+                    ->label('Checksum')
+                    ->limit(12)
+                    ->tooltip(fn (?string $state): ?string => $state)
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('external_url')
                     ->label('External URL')
                     ->url(fn (Document $record): ?string => $record->external_url)
@@ -126,6 +148,10 @@ class DocumentResource extends Resource
                 Tables\Columns\TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('imported_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('updated_at', 'desc')
             ->actions([

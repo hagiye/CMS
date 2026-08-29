@@ -30,6 +30,7 @@ class ContentNodeResource extends JsonResource
             'edition' => $this->edition,
             'source_page_start' => $this->source_page_start,
             'source_page_end' => $this->source_page_end,
+            'source_document_id' => $this->source_document_id,
             'revision' => $this->revision,
             'title' => $translation?->title,
             'body' => $translation?->body,

@@ -56,6 +56,15 @@ class ChildrenRelationManager extends RelationManager
                     ->numeric()
                     ->minValue(1)
                     ->gte('source_page_start'),
+                Forms\Components\Select::make('source_document_id')
+                    ->relationship('sourceDocument', 'title')
+                    ->label('Source PDF')
+                    ->searchable()
+                    ->preload(),
+                Forms\Components\TextInput::make('import_key')
+                    ->label('Import key')
+                    ->disabled()
+                    ->dehydrated(false),
                 Forms\Components\KeyValue::make('meta')
                     ->keyLabel('Key')
                     ->valueLabel('Value')
@@ -90,6 +99,10 @@ class ChildrenRelationManager extends RelationManager
                         ContentNodeStatus::Archived => 'danger',
                     }),
                 Tables\Columns\TextColumn::make('edition'),
+                Tables\Columns\TextColumn::make('sourceDocument.title')
+                    ->label('Source PDF')
+                    ->limit(30)
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('position')
             ->reorderable('position')

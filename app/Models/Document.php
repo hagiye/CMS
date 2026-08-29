@@ -17,12 +17,16 @@ class Document extends Model
         'external_url',
         'page_start',
         'page_end',
+        'checksum',
+        'original_filename',
+        'imported_at',
         'meta',
     ];
 
     protected $casts = [
         'page_start' => 'integer',
         'page_end' => 'integer',
+        'imported_at' => 'datetime',
         'meta' => 'array',
     ];
 

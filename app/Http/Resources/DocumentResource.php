@@ -22,6 +22,8 @@ class DocumentResource extends JsonResource
             'external_url' => $this->external_url,
             'page_start' => $this->page_start,
             'page_end' => $this->page_end,
+            'checksum' => $this->checksum,
+            'original_filename' => $this->original_filename,
             'meta' => $this->meta,
         ];
     }

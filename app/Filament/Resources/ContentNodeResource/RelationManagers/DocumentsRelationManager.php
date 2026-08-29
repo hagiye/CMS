@@ -32,6 +32,9 @@ class DocumentsRelationManager extends RelationManager
                     ->sortable(),
                 Tables\Columns\TextColumn::make('title')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('original_filename')
+                    ->label('Original filename')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('external_url')
                     ->label('External URL')
                     ->url(fn (Document $record): ?string => $record->external_url)
@@ -44,6 +47,9 @@ class DocumentsRelationManager extends RelationManager
                         $record->page_start !== null => (string) $record->page_start,
                         default => '—',
                     }),
+                Tables\Columns\TextColumn::make('imported_at')
+                    ->dateTime()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make(),

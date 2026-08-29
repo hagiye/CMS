@@ -23,6 +23,8 @@ class ContentNode extends Model
         'edition',
         'source_page_start',
         'source_page_end',
+        'source_document_id',
+        'import_key',
         'revision',
         'editor_id',
         'meta',
@@ -73,6 +75,11 @@ class ContentNode extends Model
     public function editor()
     {
         return $this->belongsTo(User::class, 'editor_id');
+    }
+
+    public function sourceDocument()
+    {
+        return $this->belongsTo(Document::class, 'source_document_id');
     }
 
     public function translations()
