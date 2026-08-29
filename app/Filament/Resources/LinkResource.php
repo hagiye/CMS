@@ -3,54 +3,88 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\LinkResource\Pages;
-use App\Filament\Resources\LinkResource\RelationManagers;
 use App\Models\Link;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class LinkResource extends Resource
 {
     protected static ?string $model = Link::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationGroup = 'Handbook';
+
+    protected static ?string $navigationIcon = 'heroicon-o-link';
+
+    protected static ?string $navigationLabel = 'Links';
+
+    /**
+     * @return array<Forms\Components\Component>
+     */
+    public static function linkFields(): array
+    {
+        return [
+            Forms\Components\TextInput::make('label')
+                ->required()
+                ->maxLength(255),
+            Forms\Components\TextInput::make('url')
+                ->required()
+                ->url()
+                ->maxLength(255)
+                ->placeholder('https://au.int/...'),
+            Forms\Components\KeyValue::make('meta')
+                ->keyLabel('Key')
+                ->valueLabel('Value')
+                ->reorderable()
+                ->columnSpanFull(),
+        ];
+    }
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                //
-            ]);
+                Forms\Components\Select::make('content_node_id')
+                    ->relationship('node', 'slug')
+                    ->required()
+                    ->searchable()
+                    ->preload()
+                    ->label('Content node'),
+                ...static::linkFields(),
+            ])
+            ->columns(2);
     }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                //
+                Tables\Columns\TextColumn::make('node.slug')
+                    ->label('Content node')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('label')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('url')
+                    ->url(fn (Link $record): string => $record->url)
+                    ->openUrlInNewTab()
+                    ->limit(70)
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->dateTime()
+                    ->sortable(),
             ])
-            ->filters([
-                //
-            ])
+            ->defaultSort('updated_at', 'desc')
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
+                Tables\Actions\DeleteBulkAction::make(),
             ]);
-    }
-
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
     }
 
     public static function getPages(): array

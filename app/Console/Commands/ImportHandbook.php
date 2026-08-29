@@ -98,6 +98,8 @@ class ImportHandbook extends Command
             ['content_node_id' => $section->id, 'kind' => 'pdf', 'title' => 'AU Handbook 2023 (EN)'],
             [
                 'external_url' => 'https://au.int/sites/default/files/documents/31829-doc-African_Union_Handbook_2023_ENGLISH.pdf',
+                'page_start' => $from,
+                'page_end' => $to,
                 'meta' => ['page_start' => $from, 'page_end' => $to],
             ]
         );

@@ -92,6 +92,8 @@ class ContentApiTest extends TestCase
             'kind' => 'pdf',
             'title' => 'AU Handbook',
             'external_url' => 'https://au.int/handbook.pdf',
+            'page_start' => 10,
+            'page_end' => 12,
             'meta' => ['page_start' => 10],
         ]);
 
@@ -99,6 +101,8 @@ class ContentApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.kind', 'pdf')
             ->assertJsonPath('data.0.external_url', 'https://au.int/handbook.pdf')
+            ->assertJsonPath('data.0.page_start', 10)
+            ->assertJsonPath('data.0.page_end', 12)
             ->assertJsonPath('data.0.meta.page_start', 10);
     }
 

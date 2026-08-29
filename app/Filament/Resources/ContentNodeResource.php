@@ -137,6 +137,13 @@ class ContentNodeResource extends Resource
             ])
             ->defaultSort('position')
             ->filters([
+                Tables\Filters\SelectFilter::make('type')
+                    ->options([
+                        'section' => 'Section',
+                        'chapter' => 'Chapter',
+                        'article' => 'Article',
+                        'page' => 'Page',
+                    ]),
                 Tables\Filters\SelectFilter::make('status')
                     ->options(ContentNodeStatus::options()),
                 Tables\Filters\TrashedFilter::make(),
@@ -149,7 +156,18 @@ class ContentNodeResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                     Tables\Actions\RestoreBulkAction::make(),
                 ]),
-            ]);
+            ])
+            ->reorderable('position');
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            ContentNodeResource\RelationManagers\TranslationsRelationManager::class,
+            ContentNodeResource\RelationManagers\DocumentsRelationManager::class,
+            ContentNodeResource\RelationManagers\LinksRelationManager::class,
+            ContentNodeResource\RelationManagers\ChildrenRelationManager::class,
+        ];
     }
 
     public static function getPages(): array

@@ -20,6 +20,8 @@ class DocumentResource extends JsonResource
             'title' => $this->title,
             'path' => $this->path,
             'external_url' => $this->external_url,
+            'page_start' => $this->page_start,
+            'page_end' => $this->page_end,
             'meta' => $this->meta,
         ];
     }

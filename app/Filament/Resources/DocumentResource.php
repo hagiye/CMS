@@ -13,70 +13,136 @@ use Filament\Tables\Table;
 class DocumentResource extends Resource
 {
     protected static ?string $model = Document::class;
+
     protected static ?string $navigationGroup = 'Handbook';
+
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
+
     protected static ?string $navigationLabel = 'Documents';
+
+    /**
+     * @return array<Forms\Components\Component>
+     */
+    public static function documentFields(): array
+    {
+        return [
+            Forms\Components\TextInput::make('title')
+                ->required()
+                ->maxLength(255),
+            Forms\Components\Select::make('kind')
+                ->options([
+                    'pdf' => 'PDF',
+                    'image' => 'Image',
+                    'link' => 'Other link',
+                ])
+                ->required()
+                ->default('pdf')
+                ->native(false),
+            Forms\Components\FileUpload::make('path')
+                ->label('Upload')
+                ->disk('public')
+                ->directory('handbook-documents')
+                ->visibility('public')
+                ->acceptedFileTypes([
+                    'application/pdf',
+                    'image/jpeg',
+                    'image/png',
+                    'image/webp',
+                ])
+                ->maxSize(20 * 1024)
+                ->downloadable()
+                ->openable()
+                ->requiredWithout('external_url')
+                ->helperText('Upload a PDF or image, or provide an external URL.'),
+            Forms\Components\TextInput::make('external_url')
+                ->label('External URL')
+                ->url()
+                ->maxLength(255)
+                ->requiredWithout('path')
+                ->placeholder('https://au.int/...'),
+            Forms\Components\TextInput::make('page_start')
+                ->label('Page start')
+                ->numeric()
+                ->minValue(1),
+            Forms\Components\TextInput::make('page_end')
+                ->label('Page end')
+                ->numeric()
+                ->minValue(1)
+                ->gte('page_start'),
+            Forms\Components\KeyValue::make('meta')
+                ->keyLabel('Key')
+                ->valueLabel('Value')
+                ->reorderable()
+                ->columnSpanFull(),
+        ];
+    }
 
     public static function form(Form $form): Form
     {
-        return $form->schema([
-            Forms\Components\Select::make('content_node_id')
-                ->relationship('node', 'slug')
-                ->searchable()
-                ->label('Node'),
-
-            Forms\Components\Select::make('kind')
-                ->options([
-                    'pdf'   => 'pdf',
-                    'image' => 'image',
-                    'link'  => 'link',
-                ])
-                ->required()
-                ->native(false),
-
-            // One of these two should be provided (we’ll soft-enforce via helper text)
-            Forms\Components\TextInput::make('path')
-                ->label('Storage Path (if uploaded)')
-                ->placeholder('storage/app/public/...'),
-
-            Forms\Components\TextInput::make('external_url')
-                ->label('External URL (e.g., AU PDF)')
-                ->placeholder('https://...'),
-
-            Forms\Components\TextInput::make('title')
-                ->label('Title'),
-
-            Forms\Components\KeyValue::make('meta')
-                ->keyLabel('key')
-                ->valueLabel('value')
-                ->reorderable()
-                ->helperText('Optional: page_start, page_end, etc.'),
-        ])->columns(2);
+        return $form
+            ->schema([
+                Forms\Components\Select::make('content_node_id')
+                    ->relationship('node', 'slug')
+                    ->required()
+                    ->searchable()
+                    ->preload()
+                    ->label('Content node'),
+                ...static::documentFields(),
+            ])
+            ->columns(2);
     }
 
     public static function table(Table $table): Table
     {
-        return $table->columns([
-            Tables\Columns\TextColumn::make('id')->sortable(),
-            Tables\Columns\TextColumn::make('kind')->searchable()->badge(),
-            Tables\Columns\TextColumn::make('title')->limit(40)->wrap(),
-            Tables\Columns\TextColumn::make('external_url')->limit(50)->wrap(),
-            Tables\Columns\TextColumn::make('node.slug')->label('Node')->sortable()->searchable(),
-            Tables\Columns\TextColumn::make('updated_at')->dateTime()->sortable(),
-        ])->actions([
-            Tables\Actions\EditAction::make(),
-            Tables\Actions\DeleteAction::make(),
-        ])->bulkActions([
-            Tables\Actions\DeleteBulkAction::make(),
-        ]);
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('node.slug')
+                    ->label('Content node')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('kind')
+                    ->badge()
+                    ->sortable(),
+                Tables\Columns\TextColumn::make('title')
+                    ->searchable()
+                    ->limit(50),
+                Tables\Columns\TextColumn::make('path')
+                    ->label('Uploaded file')
+                    ->limit(35)
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('external_url')
+                    ->label('External URL')
+                    ->url(fn (Document $record): ?string => $record->external_url)
+                    ->openUrlInNewTab()
+                    ->limit(40)
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('page_start')
+                    ->label('Pages')
+                    ->formatStateUsing(fn ($state, Document $record): string => match (true) {
+                        $record->page_start !== null && $record->page_end !== null => "{$record->page_start}–{$record->page_end}",
+                        $record->page_start !== null => (string) $record->page_start,
+                        default => '—',
+                    }),
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->dateTime()
+                    ->sortable(),
+            ])
+            ->defaultSort('updated_at', 'desc')
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
+            ]);
     }
 
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListDocuments::route('/'),
+            'index' => Pages\ListDocuments::route('/'),
             'create' => Pages\CreateDocument::route('/create'),
-            'edit'   => Pages\EditDocument::route('/{record}/edit'),
+            'edit' => Pages\EditDocument::route('/{record}/edit'),
         ];
     }
 }
