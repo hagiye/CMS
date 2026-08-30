@@ -105,6 +105,18 @@ class ImportHandbookTest extends TestCase
         $this->assertDatabaseCount('content_nodes', $existingNodeCount + 5);
     }
 
+    public function test_source_url_rejects_non_http_schemes(): void
+    {
+        $this->artisan('handbook:import', [
+            'pdfPath' => $this->pdfPath,
+            '--source-url' => 'file:///etc/passwd',
+        ])
+            ->expectsOutput('--source-url must be a valid HTTP or HTTPS URL.')
+            ->assertFailed();
+
+        $this->assertDatabaseCount('documents', 0);
+    }
+
     private function fakeInspection(): void
     {
         $inspection = [

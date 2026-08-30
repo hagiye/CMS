@@ -69,4 +69,15 @@ class SecurityTest extends TestCase
 
         $this->assertSame(UserRole::Admin, $user->role);
     }
+
+    public function test_public_search_is_rate_limited(): void
+    {
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.42']);
+
+        for ($attempt = 1; $attempt <= 30; $attempt++) {
+            $this->getJson('/api/v1/search?q=missing')->assertOk();
+        }
+
+        $this->getJson('/api/v1/search?q=missing')->assertTooManyRequests();
+    }
 }

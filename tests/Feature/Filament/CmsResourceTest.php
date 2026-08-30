@@ -17,6 +17,8 @@ use App\Models\ContentNode;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -33,7 +35,7 @@ class CmsResourceTest extends TestCase
         parent::setUp();
 
         Filament::setCurrentPanel(Filament::getPanel('admin'));
-        $this->editor = User::factory()->create();
+        $this->editor = User::factory()->admin()->create();
         $this->actingAs($this->editor);
     }
 
@@ -187,6 +189,45 @@ class CmsResourceTest extends TestCase
                 'title' => 'Duplicate English translation',
             ])
             ->assertHasTableActionErrors(['locale']);
+    }
+
+    public function test_external_urls_only_allow_http_and_https(): void
+    {
+        $node = $this->createNode('assembly');
+        $properties = [
+            'ownerRecord' => $node,
+            'pageClass' => EditContentNode::class,
+        ];
+
+        Livewire::test(DocumentsRelationManager::class, $properties)
+            ->callTableAction('create', null, [
+                'title' => 'Unsafe document',
+                'kind' => 'link',
+                'external_url' => 'file:///etc/passwd',
+            ])
+            ->assertHasTableActionErrors(['external_url']);
+
+        Livewire::test(LinksRelationManager::class, $properties)
+            ->callTableAction('create', null, [
+                'label' => 'Unsafe link',
+                'url' => 'javascript:alert(1)',
+            ])
+            ->assertHasTableActionErrors(['url']);
+    }
+
+    public function test_document_uploads_reject_unapproved_file_types(): void
+    {
+        Storage::fake('public');
+        $node = $this->createNode('assembly');
+
+        Livewire::test(DocumentsRelationManager::class, [
+            'ownerRecord' => $node,
+            'pageClass' => EditContentNode::class,
+        ])->callTableAction('create', null, [
+            'title' => 'Executable',
+            'kind' => 'pdf',
+            'path' => UploadedFile::fake()->create('payload.exe', 100, 'application/x-msdownload'),
+        ])->assertHasTableActionErrors(['path']);
     }
 
     private function createNode(string $slug, int $position = 1, ?int $parentId = null): ContentNode
