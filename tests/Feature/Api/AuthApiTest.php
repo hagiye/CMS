@@ -29,6 +29,10 @@ class AuthApiTest extends TestCase
             ->assertJsonStructure(['data' => ['token', 'user' => ['id', 'name', 'email']]]);
 
         $this->assertDatabaseCount('personal_access_tokens', 1);
+        $this->assertDatabaseHas('personal_access_tokens', [
+            'tokenable_id' => $user->id,
+            'abilities' => '["bookmarks:read","bookmarks:write"]',
+        ]);
     }
 
     public function test_login_rejects_invalid_credentials_and_invalid_input(): void
@@ -60,5 +64,25 @@ class AuthApiTest extends TestCase
             ->assertExactJson(['message' => 'Logged out.']);
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_login_is_rate_limited_after_five_attempts(): void
+    {
+        User::factory()->create([
+            'email' => 'limited@example.com',
+            'password' => 'secret123',
+        ]);
+
+        for ($attempt = 1; $attempt <= 5; $attempt++) {
+            $this->postJson('/api/v1/auth/login', [
+                'email' => 'limited@example.com',
+                'password' => 'incorrect',
+            ])->assertUnauthorized();
+        }
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'limited@example.com',
+            'password' => 'incorrect',
+        ])->assertTooManyRequests();
     }
 }

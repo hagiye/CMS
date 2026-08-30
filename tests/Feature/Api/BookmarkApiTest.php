@@ -19,7 +19,7 @@ class BookmarkApiTest extends TestCase
     {
         $user = User::factory()->create();
         $node = $this->createNode();
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['bookmarks:read', 'bookmarks:write']);
 
         $this->postJson('/api/v1/bookmarks', ['content_node_id' => $node->id])
             ->assertCreated()
@@ -41,7 +41,7 @@ class BookmarkApiTest extends TestCase
         $otherNode = $this->createNode('commission', 'Commission');
         Bookmark::create(['user_id' => $user->id, 'content_node_id' => $node->id]);
         Bookmark::create(['user_id' => $otherUser->id, 'content_node_id' => $otherNode->id]);
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['bookmarks:read']);
 
         $this->getJson('/api/v1/bookmarks?locale=en')
             ->assertOk()
@@ -56,7 +56,7 @@ class BookmarkApiTest extends TestCase
         $user = User::factory()->create();
         $node = $this->createNode();
         Bookmark::create(['user_id' => $user->id, 'content_node_id' => $node->id]);
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['bookmarks:write']);
 
         $this->deleteJson("/api/v1/bookmarks/{$node->id}")
             ->assertNoContent();
@@ -74,7 +74,7 @@ class BookmarkApiTest extends TestCase
             ->assertExactJson(['message' => 'Unauthenticated.']);
 
         $user = User::factory()->create();
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['bookmarks:write']);
 
         $this->postJson('/api/v1/bookmarks', ['content_node_id' => 99999])
             ->assertNotFound()

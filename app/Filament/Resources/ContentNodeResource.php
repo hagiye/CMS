@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Enums\ContentNodeStatus;
 use App\Enums\ContentNodeType;
+use App\Enums\UserRole;
 use App\Filament\Resources\ContentNodeResource\Pages;
 use App\Models\ContentNode;
 use Filament\Forms;
@@ -23,6 +24,21 @@ class ContentNodeResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
     protected static ?string $navigationLabel = 'Content';
+
+    /**
+     * @return array<string, string>
+     */
+    public static function allowedStatusOptions(): array
+    {
+        if (auth()->user()?->role === UserRole::Editor) {
+            return [
+                ContentNodeStatus::Draft->value => ContentNodeStatus::Draft->label(),
+                ContentNodeStatus::Review->value => ContentNodeStatus::Review->label(),
+            ];
+        }
+
+        return ContentNodeStatus::options();
+    }
 
     public static function form(Form $form): Form
     {
@@ -72,7 +88,7 @@ class ContentNodeResource extends Resource
                 Forms\Components\Section::make('Editorial lifecycle')
                     ->schema([
                         Forms\Components\Select::make('status')
-                            ->options(ContentNodeStatus::options())
+                            ->options(fn (): array => static::allowedStatusOptions())
                             ->required()
                             ->default(ContentNodeStatus::Draft->value)
                             ->native(false),

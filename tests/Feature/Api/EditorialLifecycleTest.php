@@ -84,7 +84,7 @@ class EditorialLifecycleTest extends TestCase
             'user_id' => $user->id,
             'content_node_id' => $draft->id,
         ]);
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['bookmarks:read', 'bookmarks:write']);
 
         $this->postJson('/api/v1/bookmarks', ['content_node_id' => $draft->id])
             ->assertNotFound()

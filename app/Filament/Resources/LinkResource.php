@@ -32,6 +32,7 @@ class LinkResource extends Resource
             Forms\Components\TextInput::make('url')
                 ->required()
                 ->url()
+                ->rules(['url:http,https'])
                 ->maxLength(255)
                 ->placeholder('https://au.int/...'),
             Forms\Components\KeyValue::make('meta')

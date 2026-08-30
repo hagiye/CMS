@@ -26,7 +26,10 @@ class AuthController extends Controller
         }
 
         // Create a new Sanctum token for mobile / Flutter app
-        $token = $user->createToken('mobile')->plainTextToken;
+        $token = $user->createToken('mobile', [
+            'bookmarks:read',
+            'bookmarks:write',
+        ])->plainTextToken;
 
         return response()->json(['data' => [
             'token' => $token,

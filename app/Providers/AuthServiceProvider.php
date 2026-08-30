@@ -2,7 +2,14 @@
 
 namespace App\Providers;
 
-// use Illuminate\Support\Facades\Gate;
+use App\Models\ContentNode;
+use App\Models\ContentTranslation;
+use App\Models\Document;
+use App\Models\Link;
+use App\Policies\ContentNodePolicy;
+use App\Policies\ContentTranslationPolicy;
+use App\Policies\DocumentPolicy;
+use App\Policies\LinkPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
@@ -13,7 +20,10 @@ class AuthServiceProvider extends ServiceProvider
      * @var array<class-string, class-string>
      */
     protected $policies = [
-        //
+        ContentNode::class => ContentNodePolicy::class,
+        ContentTranslation::class => ContentTranslationPolicy::class,
+        Document::class => DocumentPolicy::class,
+        Link::class => LinkPolicy::class,
     ];
 
     /**

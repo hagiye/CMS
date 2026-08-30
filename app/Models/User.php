@@ -3,12 +3,15 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\UserRole;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -21,6 +24,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
     ];
 
     /**
@@ -41,7 +45,38 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'role' => UserRole::class,
     ];
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $panel->getId() === 'admin' && $this->role !== null;
+    }
+
+    public function hasEditorialAccess(): bool
+    {
+        return $this->role !== null;
+    }
+
+    public function canCreateEditorialContent(): bool
+    {
+        return in_array($this->role, [UserRole::Admin, UserRole::Editor], true);
+    }
+
+    public function canUpdateEditorialContent(): bool
+    {
+        return $this->hasEditorialAccess();
+    }
+
+    public function canDeleteEditorialContent(): bool
+    {
+        return $this->role === UserRole::Admin;
+    }
+
+    public function canPublishEditorialContent(): bool
+    {
+        return in_array($this->role, [UserRole::Admin, UserRole::Reviewer], true);
+    }
 
     public function bookmarks()
     {

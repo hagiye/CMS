@@ -57,6 +57,7 @@ class DocumentResource extends Resource
             Forms\Components\TextInput::make('external_url')
                 ->label('External URL')
                 ->url()
+                ->rules(['url:http,https'])
                 ->maxLength(255)
                 ->requiredWithout('path')
                 ->placeholder('https://au.int/...'),

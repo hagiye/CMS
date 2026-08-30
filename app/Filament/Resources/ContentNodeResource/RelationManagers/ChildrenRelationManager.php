@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ContentNodeResource\RelationManagers;
 
 use App\Enums\ContentNodeStatus;
 use App\Enums\ContentNodeType;
+use App\Filament\Resources\ContentNodeResource;
 use App\Models\ContentNode;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -35,7 +36,7 @@ class ChildrenRelationManager extends RelationManager
                     ->default(0)
                     ->required(),
                 Forms\Components\Select::make('status')
-                    ->options(ContentNodeStatus::options())
+                    ->options(fn (): array => ContentNodeResource::allowedStatusOptions())
                     ->default(ContentNodeStatus::Draft->value)
                     ->required()
                     ->native(false),

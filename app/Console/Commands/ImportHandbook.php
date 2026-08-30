@@ -78,8 +78,8 @@ class ImportHandbook extends Command
             return self::FAILURE;
         }
 
-        if ($sourceUrl !== null && filter_var($sourceUrl, FILTER_VALIDATE_URL) === false) {
-            $this->error('--source-url must be a valid URL.');
+        if ($sourceUrl !== null && ! $this->isHttpUrl($sourceUrl)) {
+            $this->error('--source-url must be a valid HTTP or HTTPS URL.');
 
             return self::FAILURE;
         }
@@ -201,6 +201,15 @@ class ImportHandbook extends Command
         $this->line('The extracted text is ready for review and correction in Filament. Nothing was published.');
 
         return self::SUCCESS;
+    }
+
+    private function isHttpUrl(string $url): bool
+    {
+        if (filter_var($url, FILTER_VALIDATE_URL) === false) {
+            return false;
+        }
+
+        return in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true);
     }
 
     /**
