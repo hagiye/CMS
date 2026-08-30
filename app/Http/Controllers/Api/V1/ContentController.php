@@ -83,41 +83,20 @@ class ContentController extends Controller
         $term = trim($validated['q']);
         $locale = $validated['locale'] ?? 'en';
 
-        $ids = ContentTranslation::query()
+        $nodes = ContentTranslation::search($term)
             ->where('locale', $locale)
-            ->whereHas('node', fn ($builder) => $builder->published())
-            ->where(function ($query) use ($term) {
-                $query->where('title', 'like', "%{$term}%")
-                    ->orWhere('body', 'like', "%{$term}%");
-            })
-            ->orderByDesc('id')
-            ->pluck('content_node_id')
-            ->unique()
-            ->values()
-            ->all();
+            ->query(fn ($builder) => $builder
+                ->whereHas('node', fn ($nodes) => $nodes->published())
+                ->with(['node.translations' => fn ($translations) => $translations->where('locale', $locale)]))
+            ->paginate($validated['per_page'] ?? 25);
 
-        $query = ContentNode::published()
-            ->whereIn('id', $ids)
-            ->with(['translations' => fn ($builder) => $builder->where('locale', $locale)]);
-
-        if ($ids !== []) {
-            $whenClauses = [];
-            $bindings = [];
-
-            foreach ($ids as $position => $id) {
-                $whenClauses[] = 'WHEN ? THEN ?';
-                $bindings[] = $id;
-                $bindings[] = $position;
-            }
-
-            $bindings[] = count($ids);
-            $query->orderByRaw(
-                'CASE content_nodes.id '.implode(' ', $whenClauses).' ELSE ? END',
-                $bindings,
-            );
-        }
-
-        $nodes = $query->paginate($validated['per_page'] ?? 25)->withQueryString();
+        $nodes->setCollection(
+            $nodes->getCollection()
+                ->map(fn (ContentTranslation $translation) => $translation->node)
+                ->filter()
+                ->values(),
+        );
+        $nodes->withQueryString();
 
         return ContentNodeResource::collection($nodes);
     }

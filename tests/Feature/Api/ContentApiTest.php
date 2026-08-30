@@ -56,12 +56,33 @@ class ContentApiTest extends TestCase
         $this->createNode('assembly', 'Assembly', body: 'Heads of State and Government');
         $this->createNode('commission', 'Commission', body: 'Administrative body');
 
+        $draft = $this->createNode('draft-heads', 'Draft Heads');
+        $draft->update(['status' => 'draft', 'published_at' => null]);
+
+        $assembly = ContentNode::where('slug', 'assembly')->firstOrFail();
+        $assembly->translations()->create([
+            'locale' => 'fr',
+            'title' => 'Chefs d\'Etat',
+            'body' => 'Organes directeurs',
+        ]);
+
         $this->getJson('/api/v1/search?q=Heads&locale=en')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.slug', 'assembly')
             ->assertJsonPath('meta.total', 1)
             ->assertJsonStructure(['data', 'links', 'meta']);
+
+        $this->getJson('/api/v1/search?q=Commission&locale=en')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.slug', 'commission');
+
+        $this->getJson('/api/v1/search?q=Chefs&locale=fr')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.slug', 'assembly')
+            ->assertJsonPath('data.0.title', 'Chefs d\'Etat');
 
         $this->getJson('/api/v1/search?q=missing&locale=en')
             ->assertOk()
