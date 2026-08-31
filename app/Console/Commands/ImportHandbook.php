@@ -214,19 +214,36 @@ class ImportHandbook extends Command
 
     /**
      * @param  array<int, array{title: string, body: string, page_start: int, page_end: int}>  $segments
-     * @return array<int, array{title: string, body: string, page_start: int, page_end: int, import_key: string, slug: string, position: int}>
+     * @return array<int, array{title: string, body: string, page_start: int, page_end: int, import_key: string, legacy_import_key: string, slug: string, position: int}>
      */
     private function prepareSegments(array $segments, string $checksum, string $lang, string $sectionSlug): array
     {
-        $occurrences = [];
+        $rangeOccurrences = [];
+        $legacyOccurrences = [];
 
         foreach ($segments as $index => &$segment) {
-            $identity = mb_strtolower($segment['title']).'|'.$segment['page_start'].'|'.$segment['page_end'];
-            $occurrences[$identity] = ($occurrences[$identity] ?? 0) + 1;
-            $occurrence = $occurrences[$identity];
+            $rangeIdentity = $segment['page_start'].'|'.$segment['page_end'];
+            $rangeOccurrences[$rangeIdentity] = ($rangeOccurrences[$rangeIdentity] ?? 0) + 1;
+            $occurrence = $rangeOccurrences[$rangeIdentity];
             $segment['import_key'] = hash(
                 'sha256',
-                implode('|', [$checksum, 'segment', $sectionSlug, $lang, $identity, $occurrence]),
+                implode('|', [$checksum, 'segment-v2', $sectionSlug, $lang, $rangeIdentity, $occurrence]),
+            );
+
+            // Retain the original title-based identity so imports made before the
+            // stable range identity was introduced are reused on their next run.
+            $legacyIdentity = mb_strtolower($segment['title']).'|'.$rangeIdentity;
+            $legacyOccurrences[$legacyIdentity] = ($legacyOccurrences[$legacyIdentity] ?? 0) + 1;
+            $segment['legacy_import_key'] = hash(
+                'sha256',
+                implode('|', [
+                    $checksum,
+                    'segment',
+                    $sectionSlug,
+                    $lang,
+                    $legacyIdentity,
+                    $legacyOccurrences[$legacyIdentity],
+                ]),
             );
             $slugTitle = Str::slug($segment['title']) ?: 'content';
             $segment['slug'] = Str::limit(
@@ -293,7 +310,7 @@ class ImportHandbook extends Command
 
     /**
      * @param  array{total_pages: int, from: int, to: int, pages: array<int, array{number: int, text: string}>, failures: array<int, string>, segments: array}  $inspection
-     * @param  array<int, array{title: string, body: string, page_start: int, page_end: int, import_key: string, slug: string, position: int}>  $segments
+     * @param  array<int, array{title: string, body: string, page_start: int, page_end: int, import_key: string, legacy_import_key: string, slug: string, position: int}>  $segments
      * @return array{created: int, reused: int, refreshed: int}
      */
     private function persistImport(
@@ -337,12 +354,9 @@ class ImportHandbook extends Command
             $refresh,
         );
 
-        $document = Document::query()
-            ->where('checksum', $checksum)
-            ->first();
-
-        if ($document === null) {
-            $document = Document::create([
+        $document = Document::query()->firstOrCreate(
+            ['checksum' => $checksum],
+            [
                 'content_node_id' => $editionNode->id,
                 'kind' => 'pdf',
                 'title' => "African Union Handbook {$edition} (".strtoupper($lang).')',
@@ -353,8 +367,10 @@ class ImportHandbook extends Command
                 'checksum' => $checksum,
                 'original_filename' => basename($sourcePath),
                 'imported_at' => now(),
-            ]);
-        } else {
+            ],
+        );
+
+        if (! $document->wasRecentlyCreated) {
             $document->update([
                 'path' => $storedPath,
                 'external_url' => $sourceUrl ?? $document->external_url,
@@ -363,20 +379,21 @@ class ImportHandbook extends Command
             ]);
         }
 
-        $section = ContentNode::query()->where('slug', $sectionSlug)->first();
-
-        if ($section === null) {
-            $section = ContentNode::create([
+        $section = ContentNode::query()->firstOrCreate(
+            ['slug' => $sectionSlug],
+            [
                 'parent_id' => $editionNode->id,
                 'type' => ContentNodeType::Section->value,
-                'slug' => $sectionSlug,
                 'position' => ((int) $editionNode->children()->max('position')) + 1,
                 'status' => ContentNodeStatus::Draft,
                 'edition' => $edition,
                 'source_page_start' => $inspection['from'],
                 'source_page_end' => $inspection['to'],
                 'source_document_id' => $document->id,
-            ]);
+            ],
+        );
+
+        if ($section->wasRecentlyCreated) {
             $counts['created']++;
         } else {
             $this->assertNode($section, ContentNodeType::Section, $editionNode->id, '--section-slug');
@@ -389,10 +406,9 @@ class ImportHandbook extends Command
             'sha256',
             implode('|', [$checksum, 'chapter', $sectionSlug, $lang, $inspection['from'], $inspection['to']]),
         );
-        $chapter = ContentNode::query()->where('import_key', $chapterKey)->first();
-
-        if ($chapter === null) {
-            $chapter = ContentNode::create([
+        $chapter = ContentNode::query()->firstOrCreate(
+            ['import_key' => $chapterKey],
+            [
                 'parent_id' => $section->id,
                 'type' => ContentNodeType::Chapter->value,
                 'slug' => $this->availableSlug(
@@ -405,8 +421,10 @@ class ImportHandbook extends Command
                 'source_page_start' => $inspection['from'],
                 'source_page_end' => $inspection['to'],
                 'source_document_id' => $document->id,
-                'import_key' => $chapterKey,
-            ]);
+            ],
+        );
+
+        if ($chapter->wasRecentlyCreated) {
             $counts['created']++;
         } else {
             $this->assertNode($chapter, ContentNodeType::Chapter, $section->id, 'import chapter');
@@ -419,7 +437,20 @@ class ImportHandbook extends Command
             $node = ContentNode::query()->where('import_key', $segment['import_key'])->first();
 
             if ($node === null) {
-                $node = ContentNode::create([
+                $node = ContentNode::query()
+                    ->where('import_key', $segment['legacy_import_key'])
+                    ->first();
+
+                if ($node !== null) {
+                    $this->assertNode($node, ContentNodeType::Page, $chapter->id, 'import segment');
+                    $node->update(['import_key' => $segment['import_key']]);
+                }
+            }
+
+            if ($node === null) {
+                $node = ContentNode::query()->firstOrCreate(
+                    ['import_key' => $segment['import_key']],
+                    [
                     'parent_id' => $chapter->id,
                     'type' => ContentNodeType::Page->value,
                     'slug' => $this->availableSlug($segment['slug'], $segment['import_key']),
@@ -429,8 +460,11 @@ class ImportHandbook extends Command
                     'source_page_start' => $segment['page_start'],
                     'source_page_end' => $segment['page_end'],
                     'source_document_id' => $document->id,
-                    'import_key' => $segment['import_key'],
-                ]);
+                    ],
+                );
+            }
+
+            if ($node->wasRecentlyCreated) {
                 $counts['created']++;
             } else {
                 $this->assertNode($node, ContentNodeType::Page, $chapter->id, 'import segment');
