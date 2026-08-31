@@ -130,6 +130,8 @@ class ContentController extends Controller
      */
     public function bookmark(Request $request)
     {
+        $this->authorize('create', Bookmark::class);
+
         $validated = $request->validate([
             'content_node_id' => ['required', 'integer'],
             'locale' => self::LOCALE_RULE,
@@ -157,6 +159,8 @@ class ContentController extends Controller
      */
     public function myBookmarks(Request $request)
     {
+        $this->authorize('viewAny', Bookmark::class);
+
         $validated = $request->validate([
             'locale' => self::LOCALE_RULE,
             'page' => ['sometimes', 'integer', 'min:1'],
@@ -188,6 +192,7 @@ class ContentController extends Controller
             ->whereHas('node', fn ($builder) => $builder->published())
             ->firstOrFail();
 
+        $this->authorize('delete', $bookmark);
         $bookmark->delete();
 
         return response()->noContent();

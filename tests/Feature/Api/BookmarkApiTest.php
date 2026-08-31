@@ -21,14 +21,15 @@ class BookmarkApiTest extends TestCase
         $node = $this->createNode();
         Sanctum::actingAs($user, ['bookmarks:read', 'bookmarks:write']);
 
-        $this->postJson('/api/v1/bookmarks', ['content_node_id' => $node->id])
+        $created = $this->postJson('/api/v1/bookmarks', ['content_node_id' => $node->id])
             ->assertCreated()
             ->assertJsonPath('message', 'Bookmark created.')
             ->assertJsonPath('data.node.slug', 'assembly');
 
         $this->postJson('/api/v1/bookmarks', ['content_node_id' => $node->id])
             ->assertOk()
-            ->assertJsonPath('message', 'Bookmark already exists.');
+            ->assertJsonPath('message', 'Bookmark already exists.')
+            ->assertJsonPath('data.id', $created->json('data.id'));
 
         $this->assertDatabaseCount('bookmarks', 1);
     }
@@ -65,6 +66,61 @@ class BookmarkApiTest extends TestCase
             'user_id' => $user->id,
             'content_node_id' => $node->id,
         ]);
+    }
+
+    public function test_user_cannot_delete_another_users_bookmark(): void
+    {
+        $owner = User::factory()->create();
+        $attacker = User::factory()->create();
+        $node = $this->createNode();
+        $bookmark = Bookmark::create([
+            'user_id' => $owner->id,
+            'content_node_id' => $node->id,
+        ]);
+        Sanctum::actingAs($attacker, ['bookmarks:write']);
+
+        $this->deleteJson("/api/v1/bookmarks/{$node->id}")
+            ->assertNotFound()
+            ->assertExactJson(['message' => 'Resource not found.']);
+
+        $this->assertDatabaseHas('bookmarks', ['id' => $bookmark->id]);
+    }
+
+    public function test_user_id_input_cannot_spoof_bookmark_ownership(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $node = $this->createNode();
+        Sanctum::actingAs($user, ['bookmarks:write']);
+
+        $this->postJson('/api/v1/bookmarks', [
+            'content_node_id' => $node->id,
+            'user_id' => $otherUser->id,
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('bookmarks', [
+            'user_id' => $user->id,
+            'content_node_id' => $node->id,
+        ]);
+        $this->assertDatabaseMissing('bookmarks', [
+            'user_id' => $otherUser->id,
+            'content_node_id' => $node->id,
+        ]);
+    }
+
+    public function test_database_constraint_rejects_duplicate_bookmarks(): void
+    {
+        $user = User::factory()->create();
+        $node = $this->createNode();
+        $attributes = [
+            'user_id' => $user->id,
+            'content_node_id' => $node->id,
+        ];
+        Bookmark::create($attributes);
+
+        $this->expectException(\Illuminate\Database\UniqueConstraintViolationException::class);
+
+        Bookmark::create($attributes);
     }
 
     public function test_bookmark_endpoints_require_authentication_and_valid_nodes(): void
