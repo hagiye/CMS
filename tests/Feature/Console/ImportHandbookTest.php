@@ -142,6 +142,15 @@ class ImportHandbookTest extends TestCase
             ->where('source_page_start', 5)
             ->sole();
         $pageCount = ContentNode::query()->where('type', 'page')->count();
+        $legacyKey = hash('sha256', implode('|', [
+            hash_file('sha256', $this->pdfPath),
+            'segment',
+            'african-union-commission-2025',
+            'en',
+            'assembly|5|5',
+            1,
+        ]));
+        $page->update(['import_key' => $legacyKey]);
 
         $this->artisan('handbook:import', $arguments + ['--refresh' => true])->assertSuccessful();
 
@@ -151,6 +160,7 @@ class ImportHandbookTest extends TestCase
             ->where('source_page_start', 5)
             ->sole()
             ->id);
+        $this->assertNotSame($legacyKey, $page->fresh()->import_key);
         $this->assertDatabaseHas('content_translations', [
             'content_node_id' => $page->id,
             'locale' => 'en',

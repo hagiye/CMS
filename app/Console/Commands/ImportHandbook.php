@@ -441,6 +441,17 @@ class ImportHandbook extends Command
                     ->where('import_key', $segment['legacy_import_key'])
                     ->first();
 
+                if ($node === null) {
+                    $node = ContentNode::query()
+                        ->where('parent_id', $chapter->id)
+                        ->where('source_document_id', $document->id)
+                        ->where('source_page_start', $segment['page_start'])
+                        ->where('source_page_end', $segment['page_end'])
+                        ->where('position', $segment['position'])
+                        ->whereNotNull('import_key')
+                        ->first();
+                }
+
                 if ($node !== null) {
                     $this->assertNode($node, ContentNodeType::Page, $chapter->id, 'import segment');
                     $node->update(['import_key' => $segment['import_key']]);
@@ -451,15 +462,15 @@ class ImportHandbook extends Command
                 $node = ContentNode::query()->firstOrCreate(
                     ['import_key' => $segment['import_key']],
                     [
-                    'parent_id' => $chapter->id,
-                    'type' => ContentNodeType::Page->value,
-                    'slug' => $this->availableSlug($segment['slug'], $segment['import_key']),
-                    'position' => $segment['position'],
-                    'status' => ContentNodeStatus::Draft,
-                    'edition' => $edition,
-                    'source_page_start' => $segment['page_start'],
-                    'source_page_end' => $segment['page_end'],
-                    'source_document_id' => $document->id,
+                        'parent_id' => $chapter->id,
+                        'type' => ContentNodeType::Page->value,
+                        'slug' => $this->availableSlug($segment['slug'], $segment['import_key']),
+                        'position' => $segment['position'],
+                        'status' => ContentNodeStatus::Draft,
+                        'edition' => $edition,
+                        'source_page_start' => $segment['page_start'],
+                        'source_page_end' => $segment['page_end'],
+                        'source_document_id' => $document->id,
                     ],
                 );
             }
