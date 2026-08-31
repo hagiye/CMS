@@ -5,34 +5,40 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
+    private const MOBILE_TOKEN_ABILITIES = [
+        'bookmarks:read',
+        'bookmarks:write',
+    ];
+
     /**
      * POST /api/v1/auth/login
      */
-    public function login(Request $request)
+    public function login(Request $request): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'email' => ['required', 'email', 'max:255'],
             'password' => ['required', 'string', 'min:6', 'max:255'],
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        $email = Str::lower(trim($validated['email']));
+        $user = User::where('email', $email)->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        if (! $user || ! Hash::check($validated['password'], $user->password)) {
             return response()->json(['message' => 'Invalid credentials.'], 401);
         }
 
-        // Create a new Sanctum token for mobile / Flutter app
-        $token = $user->createToken('mobile', [
-            'bookmarks:read',
-            'bookmarks:write',
-        ])->plainTextToken;
+        $token = $user->createToken('mobile', self::MOBILE_TOKEN_ABILITIES)->plainTextToken;
 
         return response()->json(['data' => [
             'token' => $token,
+            'token_type' => 'Bearer',
+            'abilities' => self::MOBILE_TOKEN_ABILITIES,
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -44,9 +50,8 @@ class AuthController extends Controller
     /**
      * POST /api/v1/auth/logout
      */
-    public function logout(Request $request)
+    public function logout(Request $request): JsonResponse
     {
-        // Revoke only the current access token
         $request->user()->currentAccessToken()?->delete();
 
         return response()->json(['message' => 'Logged out.']);

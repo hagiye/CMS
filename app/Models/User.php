@@ -9,6 +9,7 @@ use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements FilamentUser
@@ -47,6 +48,11 @@ class User extends Authenticatable implements FilamentUser
         'password' => 'hashed',
         'role' => UserRole::class,
     ];
+
+    public function setEmailAttribute(string $email): void
+    {
+        $this->attributes['email'] = Str::lower(trim($email));
+    }
 
     public function canAccessPanel(Panel $panel): bool
     {
