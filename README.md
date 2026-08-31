@@ -306,11 +306,11 @@ All bookmark endpoints require a Sanctum token with the indicated ability.
 Create a bookmark:
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/bookmarks" \
+curl -X POST "http://localhost:8000/api/v1/bookmarks?locale=en" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
-  -d '{"content_node_id":42,"locale":"en"}'
+  -d '{"content_node_id":42}'
 ```
 
 The first request returns `201` with `Bookmark created.` Repeating it returns `200` with `Bookmark already exists.` and does not create a duplicate. Bookmark listings accept `locale`, `page`, and `per_page`. Users can only list and delete their own bookmarks.
