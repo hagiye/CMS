@@ -334,13 +334,24 @@ class ImportHandbook extends Command
             ->first();
 
         if ($editionNode === null) {
-            $editionNode = ContentNode::create([
-                'type' => ContentNodeType::Edition->value,
-                'slug' => $this->availableSlug('au-handbook-'.Str::slug($edition)),
-                'position' => 1,
-                'status' => ContentNodeStatus::Draft,
-                'edition' => $edition,
-            ]);
+            $editionNode = ContentNode::query()->firstOrCreate(
+                ['slug' => $this->availableSlug('au-handbook-'.Str::slug($edition))],
+                [
+                    'type' => ContentNodeType::Edition->value,
+                    'position' => 1,
+                    'status' => ContentNodeStatus::Draft,
+                    'edition' => $edition,
+                ],
+            );
+        }
+
+        if ($editionNode->nodeType() !== ContentNodeType::Edition
+            || $editionNode->parent_id !== null
+            || $editionNode->edition !== $edition) {
+            throw new RuntimeException('The existing edition slug points to an incompatible content node.');
+        }
+
+        if ($editionNode->wasRecentlyCreated) {
             $counts['created']++;
         } else {
             $counts['reused']++;
@@ -364,7 +375,6 @@ class ImportHandbook extends Command
                 'external_url' => $sourceUrl,
                 'page_start' => $inspection['from'],
                 'page_end' => $inspection['to'],
-                'checksum' => $checksum,
                 'original_filename' => basename($sourcePath),
                 'imported_at' => now(),
             ],

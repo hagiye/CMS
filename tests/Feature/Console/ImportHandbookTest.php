@@ -189,8 +189,7 @@ class ImportHandbookTest extends TestCase
     private function fakeInspection(
         string $firstTitle = 'Assembly',
         string $firstBody = 'The Assembly provides strategic direction.',
-    ): void
-    {
+    ): void {
         $inspection = $this->inspection($firstTitle, $firstBody);
 
         $this->mock(HandbookPdfInspector::class, function (MockInterface $mock) use ($inspection): void {
