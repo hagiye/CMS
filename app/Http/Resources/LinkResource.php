@@ -15,10 +15,13 @@ class LinkResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->id,
+            'id' => (int) $this->id,
+            'content_node_id' => (int) $this->content_node_id,
             'label' => $this->label,
             'url' => $this->url,
             'meta' => $this->meta,
+            'created_at' => $this->created_at?->toISOString(),
+            'updated_at' => $this->updated_at?->toISOString(),
         ];
     }
 }

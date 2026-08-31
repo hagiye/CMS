@@ -163,7 +163,7 @@ class ContentApiTest extends TestCase
     public function test_links_endpoint_serializes_links_for_a_node(): void
     {
         $node = $this->createNode('assembly', 'Assembly');
-        Link::create([
+        $link = Link::create([
             'content_node_id' => $node->id,
             'label' => 'Official page',
             'url' => 'https://au.int/assembly',
@@ -172,14 +172,19 @@ class ContentApiTest extends TestCase
 
         $this->getJson('/api/v1/nodes/assembly/links')
             ->assertOk()
+            ->assertJsonPath('data.0.id', $link->id)
+            ->assertJsonPath('data.0.content_node_id', $node->id)
             ->assertJsonPath('data.0.label', 'Official page')
+            ->assertJsonPath('data.0.url', 'https://au.int/assembly')
+            ->assertJsonPath('data.0.created_at', $link->created_at->toISOString())
+            ->assertJsonPath('data.0.updated_at', $link->updated_at->toISOString())
             ->assertJsonPath('data.0.meta.source', 'AU');
     }
 
     public function test_documents_endpoint_serializes_documents_for_a_node(): void
     {
         $node = $this->createNode('assembly', 'Assembly');
-        Document::create([
+        $document = Document::create([
             'content_node_id' => $node->id,
             'kind' => 'pdf',
             'title' => 'AU Handbook',
@@ -191,11 +196,42 @@ class ContentApiTest extends TestCase
 
         $this->getJson('/api/v1/nodes/assembly/documents')
             ->assertOk()
+            ->assertJsonPath('data.0.id', $document->id)
+            ->assertJsonPath('data.0.content_node_id', $node->id)
             ->assertJsonPath('data.0.kind', 'pdf')
+            ->assertJsonPath('data.0.source', 'external')
+            ->assertJsonPath('data.0.url', 'https://au.int/handbook.pdf')
             ->assertJsonPath('data.0.external_url', 'https://au.int/handbook.pdf')
             ->assertJsonPath('data.0.page_start', 10)
             ->assertJsonPath('data.0.page_end', 12)
             ->assertJsonPath('data.0.meta.page_start', 10);
+    }
+
+    public function test_uploaded_document_serializes_a_public_download_url_and_import_metadata(): void
+    {
+        config(['filesystems.disks.public.url' => 'https://cms.example.test/storage']);
+        $node = $this->createNode('assembly', 'Assembly');
+        $importedAt = now()->subDay()->startOfSecond();
+        $document = Document::create([
+            'content_node_id' => $node->id,
+            'kind' => 'pdf',
+            'title' => 'Uploaded handbook',
+            'path' => 'handbook-documents/handbook.pdf',
+            'checksum' => str_repeat('a', 64),
+            'original_filename' => 'AU Handbook.pdf',
+            'imported_at' => $importedAt,
+        ]);
+
+        $this->getJson('/api/v1/nodes/assembly/documents')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $document->id)
+            ->assertJsonPath('data.0.source', 'upload')
+            ->assertJsonPath('data.0.url', 'https://cms.example.test/storage/handbook-documents/handbook.pdf')
+            ->assertJsonPath('data.0.path', 'handbook-documents/handbook.pdf')
+            ->assertJsonPath('data.0.external_url', null)
+            ->assertJsonPath('data.0.checksum', str_repeat('a', 64))
+            ->assertJsonPath('data.0.original_filename', 'AU Handbook.pdf')
+            ->assertJsonPath('data.0.imported_at', $importedAt->toISOString());
     }
 
     public function test_query_validation_and_not_found_errors_use_the_api_error_shape(): void
