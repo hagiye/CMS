@@ -67,6 +67,13 @@ class ContentNode extends Model
         return $this->belongsTo(self::class, 'parent_id');
     }
 
+    public function publicParent()
+    {
+        return $this->belongsTo(self::class, 'parent_id')
+            ->published()
+            ->with(['translations', 'publicParent']);
+    }
+
     public function children()
     {
         return $this->hasMany(self::class, 'parent_id')

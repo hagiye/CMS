@@ -7,6 +7,7 @@ use App\Http\Resources\BookmarkResource;
 use App\Http\Resources\ContentNodeResource;
 use App\Http\Resources\DocumentResource;
 use App\Http\Resources\LinkResource;
+use App\Http\Resources\SearchResultResource;
 use App\Models\Bookmark;
 use App\Models\ContentNode;
 use App\Models\ContentTranslation;
@@ -85,18 +86,23 @@ class ContentController extends Controller
             ->query(fn ($builder) => $builder
                 ->preferredForLocales($fallbackLocales)
                 ->whereHas('node', fn ($nodes) => $nodes->published())
-                ->with('node.translations'))
+                ->with(['node.translations', 'node.publicParent']))
             ->paginate($validated['per_page'] ?? 25);
 
         $nodes->setCollection(
             $nodes->getCollection()
-                ->map(fn (ContentTranslation $translation) => $translation->node)
+                ->map(function (ContentTranslation $translation): ?ContentNode {
+                    $node = $translation->node;
+                    $node?->setRelation('searchTranslation', $translation);
+
+                    return $node;
+                })
                 ->filter()
                 ->values(),
         );
         $nodes->withQueryString();
 
-        return ContentNodeResource::collection($nodes);
+        return SearchResultResource::collection($nodes);
     }
 
     /**

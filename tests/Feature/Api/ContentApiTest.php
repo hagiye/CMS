@@ -104,7 +104,7 @@ class ContentApiTest extends TestCase
 
     public function test_search_returns_matching_nodes_in_a_standard_pagination_envelope(): void
     {
-        $this->createNode('assembly', 'Assembly', body: 'Heads of State and Government');
+        $this->createNode('assembly', 'Assembly', body: '<p>Heads of State and <strong>Government</strong></p>');
         $this->createNode('commission', 'Commission', body: 'Administrative body');
 
         $draft = $this->createNode('draft-heads', 'Draft Heads');
@@ -121,12 +121,19 @@ class ContentApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.slug', 'assembly')
+            ->assertJsonPath('data.0.match.locale', 'en')
+            ->assertJsonPath('data.0.match.field', 'body')
+            ->assertJsonPath('data.0.match.excerpt', 'Heads of State and Government')
+            ->assertJsonPath('data.0.breadcrumbs.0.slug', 'test-handbook-2023')
+            ->assertJsonPath('data.0.breadcrumbs.1.slug', 'assembly')
             ->assertJsonPath('meta.total', 1)
             ->assertJsonStructure(['data', 'links', 'meta']);
 
         $this->getJson('/api/v1/search?q=Commission&locale=en')
             ->assertOk()
             ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.match.field', 'title')
+            ->assertJsonPath('data.0.match.excerpt', 'Commission')
             ->assertJsonPath('data.0.slug', 'commission');
 
         $this->getJson('/api/v1/search?q=Chefs&locale=fr')
