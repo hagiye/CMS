@@ -10,6 +10,7 @@ use App\Http\Resources\LinkResource;
 use App\Models\Bookmark;
 use App\Models\ContentNode;
 use App\Models\ContentTranslation;
+use App\Support\LocalePreference;
 use Illuminate\Http\Request;
 
 class ContentController extends Controller
@@ -29,17 +30,16 @@ class ContentController extends Controller
             'per_page' => ['sometimes', 'integer', 'between:1,100'],
         ]);
 
-        $locale = $validated['locale'] ?? 'en';
         $query = ContentNode::published()
             ->when($validated['type'] ?? null, fn ($builder, $type) => $builder->where('type', $type))
-            ->with(['translations' => fn ($builder) => $builder->where('locale', $locale)])
-            ->orderBy('position');
+            ->with('translations')
+            ->orderBy('parent_id')
+            ->orderBy('position')
+            ->orderBy('id');
 
         if (($validated['include'] ?? null) === 'children') {
             $query->with([
-                'children' => fn ($builder) => $builder
-                    ->published()
-                    ->with(['translations' => fn ($translations) => $translations->where('locale', $locale)]),
+                'publicChildren',
             ]);
         }
 
@@ -56,13 +56,9 @@ class ContentController extends Controller
         $validated = $request->validate([
             'locale' => self::LOCALE_RULE,
         ]);
-        $locale = $validated['locale'] ?? 'en';
-
         $node = ContentNode::published()->with([
-            'translations' => fn ($builder) => $builder->where('locale', $locale),
-            'children' => fn ($builder) => $builder
-                ->published()
-                ->with(['translations' => fn ($translations) => $translations->where('locale', $locale)]),
+            'translations',
+            'publicChildren',
         ])->where('slug', $slug)->firstOrFail();
 
         return new ContentNodeResource($node);
@@ -81,13 +77,15 @@ class ContentController extends Controller
         ]);
 
         $term = trim($validated['q']);
-        $locale = $validated['locale'] ?? 'en';
+        $locale = LocalePreference::normalize($validated['locale'] ?? config('app.locale'));
+        $fallbackLocales = LocalePreference::fallbacks($locale);
 
         $nodes = ContentTranslation::search($term)
-            ->where('locale', $locale)
+            ->whereIn('locale', $fallbackLocales)
             ->query(fn ($builder) => $builder
+                ->preferredForLocales($fallbackLocales)
                 ->whereHas('node', fn ($nodes) => $nodes->published())
-                ->with(['node.translations' => fn ($translations) => $translations->where('locale', $locale)]))
+                ->with('node.translations'))
             ->paginate($validated['per_page'] ?? 25);
 
         $nodes->setCollection(
@@ -140,8 +138,7 @@ class ContentController extends Controller
 
         $status = $bookmark->wasRecentlyCreated ? 201 : 200;
         $message = $bookmark->wasRecentlyCreated ? 'Bookmark created.' : 'Bookmark already exists.';
-        $locale = $validated['locale'] ?? 'en';
-        $bookmark->load(['node.translations' => fn ($builder) => $builder->where('locale', $locale)]);
+        $bookmark->load('node.translations');
 
         return (new BookmarkResource($bookmark))
             ->additional(['message' => $message])
@@ -159,15 +156,13 @@ class ContentController extends Controller
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'between:1,100'],
         ]);
-        $locale = $validated['locale'] ?? 'en';
-
         $bookmarks = $request->user()
             ->bookmarks()
             ->whereHas('node', fn ($builder) => $builder->published())
             ->with([
                 'node' => fn ($builder) => $builder
                     ->published()
-                    ->with(['translations' => fn ($translations) => $translations->where('locale', $locale)]),
+                    ->with('translations'),
             ])
             ->latest('id')
             ->paginate($validated['per_page'] ?? 25)

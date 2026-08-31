@@ -47,8 +47,59 @@ class ContentApiTest extends TestCase
 
         $this->getJson('/api/v1/nodes/commission?locale=fr')
             ->assertOk()
+            ->assertJsonPath('data.locale', 'fr')
             ->assertJsonPath('data.title', 'Commission de l’Union africaine')
             ->assertJsonPath('data.body', 'Présentation');
+    }
+
+    public function test_locale_selection_falls_back_to_language_english_then_any_translation(): void
+    {
+        $node = $this->createNode('commission', 'Commission');
+        $node->translations()->create([
+            'locale' => 'fr',
+            'title' => 'Commission africaine',
+        ]);
+
+        $this->getJson('/api/v1/nodes/commission?locale=fr-CA')
+            ->assertOk()
+            ->assertJsonPath('data.locale', 'fr')
+            ->assertJsonPath('data.title', 'Commission africaine');
+
+        $this->getJson('/api/v1/nodes/commission?locale=sw')
+            ->assertOk()
+            ->assertJsonPath('data.locale', 'en')
+            ->assertJsonPath('data.title', 'Commission');
+
+        $node->translations()->delete();
+        $node->translations()->create([
+            'locale' => 'pt',
+            'title' => 'Comissão Africana',
+        ]);
+
+        $this->getJson('/api/v1/nodes/commission?locale=sw')
+            ->assertOk()
+            ->assertJsonPath('data.locale', 'pt')
+            ->assertJsonPath('data.title', 'Comissão Africana');
+    }
+
+    public function test_nested_hierarchy_is_returned_in_stable_sibling_order(): void
+    {
+        $section = $this->createNode('institutions', 'Institutions', position: 1);
+        $laterChapter = $this->createNode('later-chapter', 'Later chapter', 'chapter', 2, $section->id);
+        $firstChapter = $this->createNode('first-chapter', 'First chapter', 'chapter', 1, $section->id);
+        $this->createNode('second-page', 'Second page', 'page', 2, $firstChapter->id);
+        $this->createNode('first-article', 'First article', 'article', 1, $firstChapter->id);
+
+        $draft = $this->createNode('draft-page', 'Draft page', 'page', 0, $firstChapter->id);
+        $draft->update(['status' => 'draft', 'published_at' => null]);
+
+        $this->getJson('/api/v1/nodes/institutions?include=children')
+            ->assertOk()
+            ->assertJsonPath('data.children.0.id', $firstChapter->id)
+            ->assertJsonPath('data.children.1.id', $laterChapter->id)
+            ->assertJsonPath('data.children.0.children.0.slug', 'first-article')
+            ->assertJsonPath('data.children.0.children.1.slug', 'second-page')
+            ->assertJsonCount(2, 'data.children.0.children');
     }
 
     public function test_search_returns_matching_nodes_in_a_standard_pagination_envelope(): void
@@ -82,7 +133,18 @@ class ContentApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.slug', 'assembly')
+            ->assertJsonPath('data.0.locale', 'fr')
             ->assertJsonPath('data.0.title', 'Chefs d\'Etat');
+
+        $this->getJson('/api/v1/search?q=Heads&locale=fr')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->getJson('/api/v1/search?q=Commission&locale=fr')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.locale', 'en')
+            ->assertJsonPath('data.0.slug', 'commission');
 
         $this->getJson('/api/v1/search?q=missing&locale=en')
             ->assertOk()

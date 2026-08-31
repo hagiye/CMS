@@ -69,7 +69,18 @@ class ContentNode extends Model
 
     public function children()
     {
-        return $this->hasMany(self::class, 'parent_id')->orderBy('position');
+        return $this->hasMany(self::class, 'parent_id')
+            ->orderBy('position')
+            ->orderBy('id');
+    }
+
+    public function publicChildren()
+    {
+        return $this->hasMany(self::class, 'parent_id')
+            ->published()
+            ->with(['translations', 'publicChildren'])
+            ->orderBy('position')
+            ->orderBy('id');
     }
 
     public function editor()
