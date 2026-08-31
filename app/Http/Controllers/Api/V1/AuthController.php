@@ -4,13 +4,15 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
+    private const DUMMY_PASSWORD_HASH = '$2y$12$m6I06P9rc5X02eY1Bws2Pe7SdjLCrSoNXoHUE0QwPmiRY8fZ5uWqO';
+
     private const MOBILE_TOKEN_ABILITIES = [
         'bookmarks:read',
         'bookmarks:write',
@@ -28,8 +30,12 @@ class AuthController extends Controller
 
         $email = Str::lower(trim($validated['email']));
         $user = User::where('email', $email)->first();
+        $passwordMatches = Hash::check(
+            $validated['password'],
+            $user?->password ?? self::DUMMY_PASSWORD_HASH,
+        );
 
-        if (! $user || ! Hash::check($validated['password'], $user->password)) {
+        if ($user === null || ! $passwordMatches) {
             return response()->json(['message' => 'Invalid credentials.'], 401);
         }
 
