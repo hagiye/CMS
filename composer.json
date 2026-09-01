@@ -12,7 +12,9 @@
         "laravel/sanctum": "^3.3",
         "laravel/scout": "^10.20",
         "laravel/tinker": "^2.8",
-        "smalot/pdfparser": "^2.12"
+        "smalot/pdfparser": "^2.12",
+        "symfony/css-selector": "*",
+        "symfony/dom-crawler": "*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.9.1",
