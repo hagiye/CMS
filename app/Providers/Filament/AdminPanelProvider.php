@@ -33,7 +33,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(fn () => view('filament.components.brand'))
             ->darkModeBrandLogo(fn () => view('filament.components.brand'))
             ->brandLogoHeight('2.5rem')
-            ->darkMode(true, isForced: true)
+            ->darkMode()
             ->defaultThemeMode(ThemeMode::Dark)
             ->sidebarWidth('19rem')
             ->maxContentWidth(MaxWidth::Full)

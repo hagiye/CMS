@@ -12,6 +12,7 @@ use App\Models\ContentNode;
 use App\Models\Document;
 use App\Models\Link;
 use App\Models\User;
+use Filament\Enums\ThemeMode;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -100,5 +101,14 @@ class DashboardTest extends TestCase
         $this->assertCount(1, ContentTranslationResource::getGlobalSearchResults('Assembly'));
         $this->assertCount(1, DocumentResource::getGlobalSearchResults('Searchable Handbook'));
         $this->assertCount(1, LinkResource::getGlobalSearchResults('official source'));
+    }
+
+    public function test_panel_supports_light_and_dark_modes_with_dark_as_the_default(): void
+    {
+        $panel = Filament::getPanel('admin');
+
+        $this->assertTrue($panel->hasDarkMode());
+        $this->assertFalse($panel->hasDarkModeForced());
+        $this->assertSame(ThemeMode::Dark, $panel->getDefaultThemeMode());
     }
 }
