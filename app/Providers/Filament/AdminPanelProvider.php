@@ -54,6 +54,10 @@ class AdminPanelProvider extends PanelProvider
                 fn () => view('filament.components.theme'),
             )
             ->renderHook(
+                PanelsRenderHook::GLOBAL_SEARCH_AFTER,
+                fn () => view('filament.components.topbar-theme-switcher'),
+            )
+            ->renderHook(
                 PanelsRenderHook::SIDEBAR_FOOTER,
                 fn () => view('filament.components.sidebar-footer'),
             )

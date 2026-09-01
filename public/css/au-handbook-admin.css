@@ -63,6 +63,31 @@ html.dark .fi-sidebar-header {
     width: min(32rem, 42vw);
 }
 
+.au-topbar-theme-switcher {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 0.18rem;
+    border: 1px solid var(--au-border);
+    border-radius: 0.5rem;
+    background: #121517;
+}
+
+.au-topbar-theme-switcher .fi-theme-switcher {
+    gap: 0.1rem;
+}
+
+.au-topbar-theme-switcher .fi-theme-switcher-btn {
+    width: 2rem;
+    height: 2rem;
+    padding: 0.4rem;
+}
+
+/* The visible topbar control replaces the duplicate inside the profile dropdown. */
+.fi-dropdown-panel .fi-theme-switcher {
+    display: none;
+}
+
 html.dark .fi-global-search-field {
     background: #121517;
     border: 1px solid var(--au-border);
@@ -790,6 +815,11 @@ html.dark .fi-global-search-field {
         display: none;
     }
 
+    .au-topbar-theme-switcher .fi-theme-switcher-btn {
+        width: 1.85rem;
+        height: 1.85rem;
+    }
+
     .au-stats-grid {
         grid-template-columns: 1fr;
     }
@@ -884,6 +914,11 @@ html:not(.dark) .fi-global-search-field {
     border: 1px solid var(--au-border);
     border-radius: 0.55rem;
     box-shadow: none;
+}
+
+html:not(.dark) .au-topbar-theme-switcher {
+    border-color: var(--au-border);
+    background: #f7f9f6;
 }
 
 html:not(.dark) .fi-sidebar-group-label {

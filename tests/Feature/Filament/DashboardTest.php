@@ -110,5 +110,10 @@ class DashboardTest extends TestCase
         $this->assertTrue($panel->hasDarkMode());
         $this->assertFalse($panel->hasDarkModeForced());
         $this->assertSame(ThemeMode::Dark, $panel->getDefaultThemeMode());
+
+        $this->get('/admin')
+            ->assertOk()
+            ->assertSee('au-topbar-theme-switcher', escape: false)
+            ->assertSee('Color theme');
     }
 }
