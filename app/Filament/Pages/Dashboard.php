@@ -2,7 +2,6 @@
 
 namespace App\Filament\Pages;
 
-use App\Enums\ContentNodeStatus;
 use App\Filament\Resources\ContentNodeResource;
 use App\Filament\Resources\ContentTranslationResource;
 use App\Filament\Resources\DocumentResource;
