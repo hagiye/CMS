@@ -114,6 +114,11 @@ class DashboardTest extends TestCase
         $this->get('/admin')
             ->assertOk()
             ->assertSee('au-topbar-theme-switcher', escape: false)
+            ->assertSee('images/african-union-logo-color.png', escape: false)
+            ->assertSee('images/african-union-logo-white.png', escape: false)
             ->assertSee('Color theme');
+
+        $this->assertFileExists(public_path('images/african-union-logo-color.png'));
+        $this->assertFileExists(public_path('images/african-union-logo-white.png'));
     }
 }

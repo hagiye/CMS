@@ -8,7 +8,7 @@
                 <p>Centralized management for all AU Handbook resources.</p>
             </div>
             <div class="au-welcome-watermark" aria-hidden="true">
-                <x-filament::icon icon="heroicon-o-globe-alt" />
+                <x-au-mode-logo alt="" />
             </div>
         </section>
 
@@ -34,7 +34,7 @@
                 @if ($currentEdition)
                     <div class="au-edition-content">
                         <div class="au-book-cover" aria-hidden="true">
-                            <div class="au-book-seal"><x-filament::icon icon="heroicon-o-globe-alt" /></div>
+                            <x-au-mode-logo class="au-book-seal" alt="" />
                             <strong>AFRICAN UNION<br>HANDBOOK</strong>
                             <span>{{ $currentEdition->edition }} EDITION</span>
                         </div>
