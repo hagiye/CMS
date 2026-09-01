@@ -25,6 +25,18 @@ class ContentNodeResource extends Resource
 
     protected static ?string $navigationLabel = 'Content';
 
+    protected static ?int $navigationSort = 1;
+
+    protected static ?string $recordTitleAttribute = 'slug';
+
+    /**
+     * @return array<int, string>
+     */
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['slug', 'translations.title'];
+    }
+
     /**
      * @return array<string, string>
      */

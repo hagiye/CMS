@@ -22,6 +22,10 @@ class ContentTranslationResource extends Resource
 
     protected static ?string $navigationLabel = 'Translations';
 
+    protected static ?int $navigationSort = 2;
+
+    protected static ?string $recordTitleAttribute = 'title';
+
     /**
      * @return array<string, string>
      */

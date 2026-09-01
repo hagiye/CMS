@@ -20,6 +20,10 @@ class LinkResource extends Resource
 
     protected static ?string $navigationLabel = 'Links';
 
+    protected static ?int $navigationSort = 4;
+
+    protected static ?string $recordTitleAttribute = 'label';
+
     /**
      * @return array<Forms\Components\Component>
      */

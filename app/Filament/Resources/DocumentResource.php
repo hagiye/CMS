@@ -20,6 +20,10 @@ class DocumentResource extends Resource
 
     protected static ?string $navigationLabel = 'Documents';
 
+    protected static ?int $navigationSort = 3;
+
+    protected static ?string $recordTitleAttribute = 'title';
+
     /**
      * @return array<Forms\Components\Component>
      */
