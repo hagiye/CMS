@@ -5,7 +5,7 @@ return [
 
     'listing_url' => 'https://au.int/en/happening',
 
-    'max_pages' => env('AU_NEWS_MAX_PAGES', 5),
+    'max_pages' => (int) env('AU_NEWS_MAX_PAGES', 5),
 
     'timeout' => 20,
 

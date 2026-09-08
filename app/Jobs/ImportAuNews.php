@@ -18,15 +18,22 @@ class ImportAuNews implements ShouldQueue
 
     public function handle(AuNewsClient $client, AuNewsListingParser $parser): void
     {
+        $maxPages = max(1, (int) config('au-news.max_pages', 5));
+        $listingUrls = [];
+
         $run = NewsImportRun::create([
             'source_url' => config('au-news.listing_url'),
             'status' => 'running',
             'started_at' => now(),
+            'metadata' => [
+                'pages_scanned' => 0,
+                'max_pages' => $maxPages,
+                'listing_urls' => [],
+            ],
         ]);
 
         try {
             $url = $run->source_url;
-            $maxPages = max(1, (int) config('au-news.max_pages', 5));
             $visited = [];
             $items = [];
 
@@ -41,6 +48,16 @@ class ImportAuNews implements ShouldQueue
                 foreach ($parser->parse($html) as $item) {
                     $items[$item->url] ??= $item;
                 }
+
+                $listingUrls[] = $url;
+                $run->update([
+                    'items_found' => count($items),
+                    'metadata' => array_merge($run->metadata ?? [], [
+                        'pages_scanned' => count($listingUrls),
+                        'max_pages' => $maxPages,
+                        'listing_urls' => $listingUrls,
+                    ]),
+                ]);
 
                 $url = $parser->nextPageUrl($html);
             }

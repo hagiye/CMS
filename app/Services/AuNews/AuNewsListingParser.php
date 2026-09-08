@@ -104,7 +104,8 @@ class AuNewsListingParser
             }
 
             try {
-                $uri = UriResolver::resolve(new Uri('https://au.int/en/happening'), new Uri($href));
+                $baseUrl = rtrim((string) config('au-news.base_url', 'https://au.int'), '/');
+                $uri = UriResolver::resolve(new Uri($baseUrl.'/en/happening'), new Uri($href));
             } catch (\InvalidArgumentException) {
                 continue;
             }
