@@ -25,8 +25,25 @@ class ImportAuNews implements ShouldQueue
         ]);
 
         try {
-            $html = $client->get($run->source_url);
-            $items = $parser->parse($html);
+            $url = $run->source_url;
+            $maxPages = max(1, (int) config('au-news.max_pages', 5));
+            $visited = [];
+            $items = [];
+
+            for ($page = 0; $page < $maxPages && $url !== null; $page++) {
+                if (isset($visited[$url])) {
+                    break;
+                }
+
+                $visited[$url] = true;
+                $html = $client->get($url);
+
+                foreach ($parser->parse($html) as $item) {
+                    $items[$item->url] ??= $item;
+                }
+
+                $url = $parser->nextPageUrl($html);
+            }
 
             $run->update(['items_found' => count($items)]);
 

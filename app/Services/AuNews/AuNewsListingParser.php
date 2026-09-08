@@ -4,6 +4,8 @@ namespace App\Services\AuNews;
 
 use App\Data\AuNewsListingItem;
 use DOMElement;
+use GuzzleHttp\Psr7\Uri;
+use GuzzleHttp\Psr7\UriResolver;
 use Symfony\Component\DomCrawler\Crawler;
 
 class AuNewsListingParser
@@ -88,6 +90,50 @@ class AuNewsListingParser
         });
 
         return array_values($items);
+    }
+
+    public function nextPageUrl(string $html): ?string
+    {
+        $crawler = new Crawler($html);
+
+        foreach ($crawler->filter('.pager__item--next a[href], .pager-next a[href], nav.pager a[rel~="next"][href]') as $link) {
+            $href = trim($link->getAttribute('href'));
+
+            if ($href === '' || str_starts_with($href, '#')) {
+                continue;
+            }
+
+            try {
+                $uri = UriResolver::resolve(new Uri('https://au.int/en/happening'), new Uri($href));
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            // Only the English happening pager may extend the listing crawl.
+            if (
+                $uri->getScheme() !== 'https'
+                || $uri->getHost() !== 'au.int'
+                || $uri->getPath() !== '/en/happening'
+                || $uri->getUserInfo() !== ''
+                || $uri->getPort() !== null
+            ) {
+                continue;
+            }
+
+            parse_str($uri->getQuery(), $query);
+
+            if (! isset($query['page']) || ! is_string($query['page']) || ! ctype_digit($query['page'])) {
+                continue;
+            }
+
+            // Canonicalize equivalent URLs so fragment/query variations cannot evade repeat detection.
+            $query['page'] = (string) ((int) $query['page']);
+            ksort($query);
+
+            return (string) $uri->withFragment('')->withQuery(http_build_query($query, '', '&', PHP_QUERY_RFC3986));
+        }
+
+        return null;
     }
 
     private function looksLikeNewsLink(string $url): bool
