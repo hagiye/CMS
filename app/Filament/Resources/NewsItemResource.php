@@ -115,12 +115,55 @@ class NewsItemResource extends Resource
     {
         return $infolist->schema([
             Infolists\Components\Section::make()->schema([
-                Infolists\Components\TextEntry::make('title')->hiddenLabel()->size('lg')->weight('bold')->columnSpanFull(),
+                Infolists\Components\Group::make()->schema([
                 Infolists\Components\TextEntry::make('type')->hiddenLabel()->badge()
-                    ->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state),
-                Infolists\Components\TextEntry::make('status')->hiddenLabel()->badge(),
-                Infolists\Components\TextEntry::make('locale')->hiddenLabel()->badge(),
-                Infolists\Components\TextEntry::make('published_at')->dateTime('j M Y, H:i'),
+                    ->color('info')->formatStateUsing(fn (string $state): string => Str::title(self::TYPES[$state] ?? $state)),
+                Infolists\Components\TextEntry::make('status')->hiddenLabel()->badge()
+                    ->formatStateUsing(fn (string $state): string => ucfirst($state))
+                    ->color(fn (string $state): string => match ($state) {
+                        'published' => 'success', 'review' => 'warning', default => 'gray',
+                    }),
+                Infolists\Components\TextEntry::make('locale')->hiddenLabel()->badge()->color('gray')
+                    ->formatStateUsing(fn (string $state): string => strtoupper($state)),
+                ])->columns(3),
+                Infolists\Components\TextEntry::make('title')->hiddenLabel()->size('lg')->weight('bold'),
+                Infolists\Components\TextEntry::make('published_at')->label('Published')->inlineLabel()
+                    ->dateTime('j M Y, H:i')->placeholder('Not published'),
+                Infolists\Components\Actions::make([
+                    Infolists\Components\Actions\Action::make('publish')
+                        ->label('Publish')->icon('heroicon-o-check-circle')->color('success')
+                        ->visible(fn (NewsItem $record): bool => $record->status !== 'published' && static::canEdit($record))
+                        ->action(function (NewsItem $record): void {
+                            $record->update(['status' => 'published', 'published_at' => $record->published_at ?? now()]);
+                            \Filament\Notifications\Notification::make()->title('News item published')->success()->send();
+                        }),
+                    Infolists\Components\Actions\Action::make('edit')
+                        ->label('Edit')->icon('heroicon-o-pencil-square')->color('gray')
+                        ->visible(fn (NewsItem $record): bool => static::canEdit($record))
+                        ->url(fn (NewsItem $record): string => static::getUrl('edit', ['record' => $record])),
+                    Infolists\Components\Actions\Action::make('archive')
+                        ->label('Archive')->icon('heroicon-o-archive-box')->color('danger')
+                        ->visible(fn (NewsItem $record): bool => $record->status !== 'archived' && static::canEdit($record))
+                        ->action(function (NewsItem $record): void {
+                            $record->update(['status' => 'archived']);
+                            \Filament\Notifications\Notification::make()->title('News item archived')->success()->send();
+                        }),
+                    Infolists\Components\Actions\Action::make('openSource')
+                        ->label('Open Source')->icon('heroicon-o-arrow-top-right-on-square')->color('gray')
+                        ->visible(fn (NewsItem $record): bool => (bool) preg_match('~^https?://~i', $record->source_url))
+                        ->url(fn (NewsItem $record): string => $record->source_url)->openUrlInNewTab(),
+                ])->key('news-publication-actions'),
+            ]),
+            Infolists\Components\Section::make('Hero Image')->schema([
+                Infolists\Components\ImageEntry::make('image_url')->hiddenLabel()->height(360)->width('100%'),
+            ])->visible(fn (NewsItem $record): bool => filled($record->image_url)),
+            Infolists\Components\Section::make('Excerpt')->schema([
+                Infolists\Components\TextEntry::make('excerpt')->hiddenLabel()->placeholder('No summary available.'),
+            ]),
+            Infolists\Components\Section::make('Content')->schema([
+                Infolists\Components\TextEntry::make('body')->hiddenLabel()->html()->placeholder('No article content available.'),
+            ]),
+            Infolists\Components\Section::make('Source & Sync')->schema([
                 Infolists\Components\TextEntry::make('source_url')->label('Source URL')
                     ->url(fn (NewsItem $record): ?string => preg_match('~^https?://~i', $record->source_url) ? $record->source_url : null)
                     ->openUrlInNewTab()->columnSpanFull(),
@@ -129,12 +172,8 @@ class NewsItemResource extends Resource
                 Infolists\Components\TextEntry::make('last_scraped_at')->dateTime('j M Y, H:i')->placeholder('-'),
                 Infolists\Components\TextEntry::make('source_changed_at')->dateTime('j M Y, H:i')->placeholder('-'),
                 Infolists\Components\TextEntry::make('content_hash')->copyable()->columnSpanFull()->placeholder('-'),
-                Infolists\Components\ImageEntry::make('image_url')->hiddenLabel()->height(280)->columnSpanFull()
-                    ->visible(fn (NewsItem $record): bool => filled($record->image_url)),
-                Infolists\Components\TextEntry::make('excerpt')->columnSpanFull()->placeholder('-'),
-                Infolists\Components\TextEntry::make('body')->label('Content')->html()->columnSpanFull(),
-            ])->columns(3),
-        ]);
+            ])->columns(2),
+        ])->columns(1);
     }
 
     public static function table(Table $table): Table
