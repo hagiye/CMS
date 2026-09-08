@@ -6,6 +6,9 @@ use App\Filament\Resources\NewsItemResource\Pages;
 use App\Models\NewsItem;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Infolists;
+use Filament\Infolists\Infolist;
+use Illuminate\Support\Str;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -45,10 +48,7 @@ class NewsItemResource extends Resource
         'local' => 'Keep local edits',
     ];
 
-    public static function canCreate(): bool
-    {
-        return false;
-    }
+    protected static ?string $pluralModelLabel = 'All Updates';
 
     public static function getGloballySearchableAttributes(): array
     {
@@ -61,7 +61,13 @@ class NewsItemResource extends Resource
             ->schema([
                 Forms\Components\Section::make('Content')
                     ->schema([
-                        Forms\Components\TextInput::make('title')->required()->maxLength(255),
+                        Forms\Components\TextInput::make('title')->required()->maxLength(255)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(function (Forms\Set $set, Forms\Get $get, ?string $state, string $operation): void {
+                                if ($operation === 'create' && blank($get('slug'))) {
+                                    $set('slug', Str::slug($state ?? ''));
+                                }
+                            }),
                         Forms\Components\TextInput::make('slug')
                             ->required()->maxLength(255)->unique(ignoreRecord: true),
                         Forms\Components\Select::make('type')
@@ -69,32 +75,66 @@ class NewsItemResource extends Resource
                         Forms\Components\Textarea::make('excerpt')->rows(3)->columnSpanFull(),
                         Forms\Components\RichEditor::make('body')
                             ->disableToolbarButtons(['attachFiles'])->columnSpanFull(),
-                    ])->columns(2),
+                    ])->columnSpan(['lg' => 2]),
+                Forms\Components\Group::make()->schema([
                 Forms\Components\Section::make('Publication')
                     ->schema([
                         Forms\Components\Select::make('status')
                             ->options(self::STATUSES)->default('review')->required(),
                         Forms\Components\DateTimePicker::make('published_at'),
                         Forms\Components\TextInput::make('locale')->default('en')->required()->maxLength(10),
-                    ])->columns(3),
+                    ]),
                 Forms\Components\Section::make('Media')
                     ->schema([
                         Forms\Components\TextInput::make('image_url')->url()->maxLength(255)->label('Image URL'),
+                        Forms\Components\Placeholder::make('image_preview')->label('Preview')
+                            ->content(fn (Forms\Get $get) => view('filament.news.image-preview', ['url' => $get('image_url')]))
+                            ->visible(fn (Forms\Get $get): bool => filled($get('image_url'))),
                     ]),
                 Forms\Components\Section::make('Source & Sync')
                     ->schema([
                         Forms\Components\TextInput::make('source_url')
-                            ->label('Source URL')->url()->readOnly()->dehydrated(false)->columnSpanFull(),
+                            ->label('Source URL')->url()->rules(['url:http,https'])->maxLength(255)
+                            ->required()->unique(ignoreRecord: true)
+                            ->readOnly(fn (string $operation): bool => $operation !== 'create')
+                            ->dehydrated(fn (string $operation): bool => $operation === 'create')->columnSpanFull(),
                         Forms\Components\TextInput::make('source_domain')->readOnly()->dehydrated(false),
                         Forms\Components\Select::make('sync_mode')
-                            ->options(self::SYNC_MODES)->required()
+                            ->options(self::SYNC_MODES)->default('local')->required()
                             ->helperText('Choose Keep local edits to protect content from future source imports.'),
                         Forms\Components\TextInput::make('source_changed_at')->readOnly()->dehydrated(false),
                         Forms\Components\TextInput::make('last_scraped_at')->readOnly()->dehydrated(false),
                         Forms\Components\TextInput::make('content_hash')
                             ->readOnly()->dehydrated(false)->hiddenOn('edit')->columnSpanFull(),
                     ])->columns(2),
-            ]);
+                ])->columnSpan(['lg' => 1]),
+            ])->columns(['lg' => 3]);
+    }
+
+    public static function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist->schema([
+            Infolists\Components\Section::make()->schema([
+                Infolists\Components\TextEntry::make('title')->hiddenLabel()->size('lg')->weight('bold')->columnSpanFull(),
+                Infolists\Components\TextEntry::make('type')->hiddenLabel()->badge()
+                    ->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state),
+                Infolists\Components\TextEntry::make('status')->hiddenLabel()->badge(),
+                Infolists\Components\TextEntry::make('locale')->hiddenLabel()->badge(),
+                Infolists\Components\TextEntry::make('published_at')->dateTime('j M Y, H:i'),
+                Infolists\Components\TextEntry::make('source_url')->label('Source URL')
+                    ->url(fn (NewsItem $record): ?string => preg_match('~^https?://~i', $record->source_url) ? $record->source_url : null)
+                    ->openUrlInNewTab()->columnSpanFull(),
+                Infolists\Components\TextEntry::make('source_domain'),
+                Infolists\Components\TextEntry::make('sync_mode')->badge(),
+                Infolists\Components\TextEntry::make('last_scraped_at')->dateTime('j M Y, H:i')->placeholder('-'),
+                Infolists\Components\TextEntry::make('source_changed_at')->dateTime('j M Y, H:i')->placeholder('-'),
+                Infolists\Components\TextEntry::make('content_hash')->copyable()->columnSpanFull()->placeholder('-'),
+                Infolists\Components\ImageEntry::make('image_url')->hiddenLabel()->height(280)->columnSpanFull()
+                    ->visible(fn (NewsItem $record): bool => filled($record->image_url)),
+                Infolists\Components\TextEntry::make('excerpt')->columnSpanFull()->placeholder('-'),
+                Infolists\Components\TextEntry::make('body')->label('Content')->html()->columnSpanFull(),
+            ])->columns(3),
+        ]);
     }
 
     public static function table(Table $table): Table
@@ -102,8 +142,12 @@ class NewsItemResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('title')
-                    ->searchable(['title', 'excerpt', 'source_url'])->limit(70)->wrap(),
+                    ->searchable(['title', 'excerpt', 'source_url'])->limit(50),
                 Tables\Columns\TextColumn::make('type')->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'news' => 'success', 'speech' => 'danger', 'media_advisory' => 'warning',
+                        'statement', 'readout' => 'primary', default => 'info',
+                    })
                     ->formatStateUsing(fn (string $state): string => self::TYPES[$state] ?? $state),
                 Tables\Columns\TextColumn::make('status')->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -112,10 +156,12 @@ class NewsItemResource extends Resource
                         default => 'gray',
                     }),
                 Tables\Columns\TextColumn::make('locale'),
-                Tables\Columns\TextColumn::make('published_at')->dateTime()->sortable(),
-                Tables\Columns\TextColumn::make('sync_mode')->badge(),
+                Tables\Columns\TextColumn::make('published_at')->dateTime('j M Y, H:i')->sortable(),
+                Tables\Columns\TextColumn::make('sync_mode')->badge()
+                    ->formatStateUsing(fn (string $state): string => ucfirst($state))
+                    ->color(fn (string $state): string => $state === 'local' ? 'gray' : 'info'),
                 Tables\Columns\TextColumn::make('last_scraped_at')
-                    ->dateTime()->toggleable(isToggledHiddenByDefault: true),
+                    ->dateTime('j M Y, H:i')->toggleable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -126,10 +172,12 @@ class NewsItemResource extends Resource
                     fn (): array => NewsItem::query()->distinct()->orderBy('locale')->pluck('locale', 'locale')->all()
                 ),
                 Tables\Filters\SelectFilter::make('sync_mode')->options(self::SYNC_MODES),
-            ])
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)
+            ->filtersFormColumns(4)
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\ViewAction::make(),
+                Tables\Actions\ViewAction::make()->button()->color('gray'),
+                Tables\Actions\EditAction::make()->button()->color('gray'),
+                Tables\Actions\ActionGroup::make([
                 Tables\Actions\Action::make('publish')
                     ->label('Publish')->icon('heroicon-o-check-circle')->color('success')
                     ->visible(fn (NewsItem $record): bool => $record->status !== 'published' && static::canEdit($record))
@@ -145,7 +193,9 @@ class NewsItemResource extends Resource
                     ->action(function (NewsItem $record): void {
                         $record->update(['status' => 'archived']);
                     }),
+                ]),
             ])
+            ->paginationPageOptions([10, 25, 50])->defaultPaginationPageOption(10)
             ->defaultSort('published_at', 'desc');
     }
 
@@ -161,6 +211,7 @@ class NewsItemResource extends Resource
         return [
             'index' => Pages\ListNewsItems::route('/'),
             'create' => Pages\CreateNewsItem::route('/create'),
+            'view' => Pages\ViewNewsItem::route('/{record}'),
             'edit' => Pages\EditNewsItem::route('/{record}/edit'),
         ];
     }

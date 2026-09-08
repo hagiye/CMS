@@ -10,10 +10,17 @@ class ListNewsItems extends ListRecords
 {
     protected static string $resource = NewsItemResource::class;
 
+    protected static ?string $title = 'All Updates';
+
+    public function getSubheading(): ?string
+    {
+        return 'Manage news, press releases, speeches, readouts and other AU updates.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
+            Actions\CreateAction::make()->label('Create Update')->icon('heroicon-o-plus'),
         ];
     }
 }

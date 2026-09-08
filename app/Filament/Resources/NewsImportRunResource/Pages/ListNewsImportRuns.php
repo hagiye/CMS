@@ -12,6 +12,11 @@ class ListNewsImportRuns extends ListRecords
 {
     protected static string $resource = NewsImportRunResource::class;
 
+    public function getSubheading(): ?string
+    {
+        return 'History of AU News imports and synchronization runs.';
+    }
+
     protected function getHeaderActions(): array
     {
         return [

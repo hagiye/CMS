@@ -48,18 +48,18 @@ class NewsImportRunResource extends Resource
     {
         return $infolist->schema([
             Section::make('Import details')->schema([
-                TextEntry::make('source_url')->label('Source URL')->columnSpanFull(),
+                TextEntry::make('source_url')->label('Source URL')->columnSpanFull()
+                    ->url(fn (NewsImportRun $record): ?string => preg_match('~^https?://~i', $record->source_url) ? $record->source_url : null)
+                    ->openUrlInNewTab(),
                 TextEntry::make('status')->badge(),
                 TextEntry::make('started_at')->dateTime(),
                 TextEntry::make('finished_at')->dateTime()->placeholder('—'),
-            ])->columns(3),
-            Section::make('Results')->schema([
                 TextEntry::make('items_found')->numeric(),
                 TextEntry::make('items_created')->numeric(),
                 TextEntry::make('items_updated')->numeric(),
                 TextEntry::make('items_skipped')->numeric(),
                 TextEntry::make('items_failed')->numeric(),
-            ])->columns(5),
+            ])->columns(2)->columnSpan(['lg' => 2]),
             Section::make('Diagnostics')->schema([
                 TextEntry::make('error_message')->placeholder('No errors')->columnSpanFull(),
                 TextEntry::make('metadata')
@@ -70,15 +70,15 @@ class NewsImportRunResource extends Resource
                     ->visible(fn (NewsImportRun $record): bool => filled($record->metadata))
                     ->extraAttributes(['class' => 'whitespace-pre-wrap font-mono'])
                     ->columnSpanFull(),
-            ]),
-        ]);
+            ])->columnSpan(['lg' => 1]),
+        ])->columns(['lg' => 3]);
     }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('started_at')->dateTime()->sortable(),
+                Tables\Columns\TextColumn::make('started_at')->dateTime('j M Y, H:i')->sortable(),
                 Tables\Columns\TextColumn::make('status')->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'running' => 'warning',
@@ -86,16 +86,17 @@ class NewsImportRunResource extends Resource
                         'failed' => 'danger',
                         default => 'gray',
                     }),
-                Tables\Columns\TextColumn::make('items_found')->numeric(),
-                Tables\Columns\TextColumn::make('items_created')->numeric(),
-                Tables\Columns\TextColumn::make('items_updated')->numeric(),
-                Tables\Columns\TextColumn::make('items_skipped')->numeric(),
-                Tables\Columns\TextColumn::make('items_failed')->numeric(),
-                Tables\Columns\TextColumn::make('finished_at')->dateTime(),
+                Tables\Columns\TextColumn::make('items_found')->label('Found')->numeric(),
+                Tables\Columns\TextColumn::make('items_created')->label('Created')->numeric(),
+                Tables\Columns\TextColumn::make('items_updated')->label('Updated')->numeric(),
+                Tables\Columns\TextColumn::make('items_skipped')->label('Skipped')->numeric(),
+                Tables\Columns\TextColumn::make('items_failed')->label('Failed')->numeric(),
+                Tables\Columns\TextColumn::make('finished_at')->dateTime('j M Y, H:i'),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
             ])
+            ->paginationPageOptions([10, 25, 50])->defaultPaginationPageOption(10)
             ->defaultSort('started_at', 'desc');
     }
 
