@@ -44,11 +44,21 @@ class AuNewsListingParser
             }
 
             $container = $this->listingContainer($link);
-            $type = $this->firstText($container, [
+            $type = $this->visibleCategory($container, [
+                '.field--name-field-type .field__item',
                 '.field--name-field-type',
+                '.field-name-field-type .field-item',
                 '.field-name-field-type',
+                '.views-field-field-type .field-content',
                 '.views-field-field-type',
+                '.views-field-type .field-content',
                 '.views-field-type',
+                '.field--name-field-category .field__item',
+                '.field--name-field-category',
+                '.field-name-field-category .field-item',
+                '.field-name-field-category',
+                '.views-field-field-category .field-content',
+                '.views-field-field-category',
                 '.content-type',
                 '.news-type',
                 '.category',
@@ -124,37 +134,59 @@ class AuNewsListingParser
 
     private function normalizeType(?string $type, string $url): string
     {
-        if ($type === null) {
+        if ($type === null || trim($type) === '') {
             return $this->typeFromUrl($url) ?? 'news';
         }
 
-        $type = strtolower(str_replace(['-', '_'], ' ', (string) $type));
+        $type = strtolower(str_replace(['-', '_'], ' ', $type));
+        $type = trim(preg_replace('/[\s\p{Z}]+/u', ' ', $type) ?? $type);
 
-        if (str_contains($type, 'media advisory') || str_contains($type, 'briefing')) {
-            return 'media_advisory';
+        // A visible category is authoritative, even when its URL suggests another type.
+        return match ($type) {
+            'press release', 'press releases', 'pressreleases' => 'press_release',
+            'speech', 'speeches' => 'speech',
+            'readout', 'readouts' => 'readout',
+            'event', 'events' => 'event',
+            'media advisory', 'media advisories', 'briefing' => 'media_advisory',
+            'statement', 'statements' => 'statement',
+            default => 'news',
+        };
+    }
+
+    /**
+     * @param  array<int, string>  $selectors
+     */
+    private function visibleCategory(Crawler $container, array $selectors): ?string
+    {
+        foreach ($selectors as $selector) {
+            foreach ($container->filter($selector) as $node) {
+                $hidden = false;
+
+                for ($ancestor = $node; $ancestor instanceof DOMElement; $ancestor = $ancestor->parentNode) {
+                    if (
+                        $ancestor->hasAttribute('hidden')
+                        || strtolower($ancestor->getAttribute('aria-hidden')) === 'true'
+                        || preg_match('/(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:!important\s*)?(?:;|$)/i', $ancestor->getAttribute('style'))
+                        || preg_match('/(?:^|\s)(?:hidden|visually-hidden|element-invisible|sr-only)(?:\s|$)/', $ancestor->getAttribute('class'))
+                    ) {
+                        $hidden = true;
+                        break;
+                    }
+                }
+
+                if ($hidden) {
+                    continue;
+                }
+
+                $label = trim((new Crawler($node))->text('', true));
+
+                if ($label !== '') {
+                    return $label;
+                }
+            }
         }
 
-        if (str_contains($type, 'press release') || str_contains($type, 'pressreleases')) {
-            return 'press_release';
-        }
-
-        if (str_contains($type, 'speech')) {
-            return 'speech';
-        }
-
-        if (str_contains($type, 'readout')) {
-            return 'readout';
-        }
-
-        if (str_contains($type, '/events/') || trim($type) === 'event') {
-            return 'event';
-        }
-
-        if (str_contains($type, 'statement')) {
-            return 'statement';
-        }
-
-        return 'news';
+        return null;
     }
 
     private function typeFromUrl(string $url): ?string
