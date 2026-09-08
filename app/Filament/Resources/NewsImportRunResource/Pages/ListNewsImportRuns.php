@@ -12,6 +12,10 @@ class ListNewsImportRuns extends ListRecords
 {
     protected static string $resource = NewsImportRunResource::class;
 
+    protected static ?string $title = 'Import Runs';
+
+    protected static string $view = 'filament.news.import-runs-list';
+
     public function getSubheading(): ?string
     {
         return 'History of AU News imports and synchronization runs.';
@@ -23,6 +27,7 @@ class ListNewsImportRuns extends ListRecords
             Actions\Action::make('syncAuNews')
                 ->label('Sync AU News')
                 ->icon('heroicon-o-arrow-path')
+                ->color('success')
                 ->action(function (): void {
                     ImportAuNews::dispatch();
 

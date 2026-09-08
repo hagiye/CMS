@@ -10,7 +10,12 @@ class ViewNewsImportRun extends ViewRecord
 {
     protected static string $resource = NewsImportRunResource::class;
 
-    protected static ?string $title = 'Import Run Details';
+    protected static string $view = 'filament.news.import-run-view';
+
+    public function getTitle(): string
+    {
+        return 'Import Run #'.$this->record->getKey();
+    }
 
     protected function getHeaderActions(): array
     {
