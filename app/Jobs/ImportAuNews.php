@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class ImportAuNews implements ShouldQueue
@@ -74,10 +75,12 @@ class ImportAuNews implements ShouldQueue
                 ], $run->id);
             }
 
-            $run->update([
-                'status' => 'dispatched',
-                'finished_at' => now(),
-            ]);
+            DB::transaction(function () use ($run): void {
+                $lockedRun = NewsImportRun::whereKey($run->id)->lockForUpdate()->firstOrFail();
+                $lockedRun->status = 'processing';
+                $lockedRun->completeIfProcessed();
+                $lockedRun->save();
+            });
         } catch (Throwable $exception) {
             $run->update([
                 'status' => 'failed',

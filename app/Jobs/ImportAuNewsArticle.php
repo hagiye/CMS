@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class ImportAuNewsArticle implements ShouldQueue
@@ -44,13 +45,24 @@ class ImportAuNewsArticle implements ShouldQueue
                 'updated' => 'items_updated',
                 'skipped', 'changed' => 'items_skipped',
             };
-
-            NewsImportRun::whereKey($this->runId)->increment($counter);
         } catch (Throwable $exception) {
-            NewsImportRun::whereKey($this->runId)->increment('items_failed');
+            $this->recordResult('items_failed');
             report($exception);
 
             throw $exception;
         }
+
+        $this->recordResult($counter);
+    }
+
+    private function recordResult(string $counter): void
+    {
+        DB::transaction(function () use ($counter): void {
+            $run = NewsImportRun::whereKey($this->runId)->lockForUpdate()->firstOrFail();
+            $run->increment($counter);
+            $run->refresh();
+            $run->completeIfProcessed();
+            $run->save();
+        });
     }
 }
